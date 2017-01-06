@@ -142,13 +142,12 @@ removed as necessary (hopefully)."
   ;; lib https://github.com/rejeep/f.el but AGGGHHHHHHH fuck
   ;; melpa bloat ((t. spacemacs user)), I'll write my own
   ;; shitty implementaion. Don't yell at me please.
-  (let ((sep (if (member system-type '(ms-dos windows-nt)) ?\\ ?/))
-        (item (pop items))
-        (result ""))
+  (let ((item (pop items)) (result ""))
     (while item
-      (setq result (concat result (if (equal sep (aref item (1- (length item))))
-                                      (substring item 0 -1) item)
-                           (char-to-string sep)))
+      (setq result (concat result
+                           (if (equal ?/ (aref item (1- (length item))))
+                               (substring item 0 -1) item)
+                           "/"))
       (setq item (pop items)))
     (expand-file-name (substring result 0 -1))))
 
