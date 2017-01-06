@@ -131,24 +131,24 @@ will have to set this to your screen width manually")
   "Buffer-local list containing all the photos in a thread."))
 (make-variable-buffer-local (defvar q4/mark-ring '()
   "Buffer-local list which stores navigation marks for quote hopping."))
-
+(make-variable-buffer-local (defvar q4/thumbs '()
+   "Buffer local containment list used for thumbnail urls."))
 
 (defun q4/path-join (&rest items)
   "Feed this thing some strings and it will (maybe) shit out
 a (possibly) coherent path name with slashes added or
 removed as necessary (hopefully)."
-  ;; TODO: Rewrite this, you jackass.
   ;; This functionality is provided by the third party
   ;; lib https://github.com/rejeep/f.el but AGGGHHHHHHH fuck
   ;; melpa bloat ((t. spacemacs user)), I'll write my own
   ;; shitty implementaion. Don't yell at me please.
-  (let ((item (pop items)) (result ""))
+  (let ((item (pop items))
+        (result ""))
     (while item
       (setq result (concat result
                            (if (equal ?/ (aref item (1- (length item))))
-                               (substring item 0 -1) item)
-                           "/"))
-      (setq item (pop items)))
+                               (substring item 0 -1) item) "/")
+            item (pop items)))
     (expand-file-name (substring result 0 -1))))
 
 
@@ -394,6 +394,14 @@ busi....errr...collect all urls in the buffer."
         (message "No URLs in this post.")))))
 
 
+(defun q4/browse-content-externally ()
+  "Opens the permalink for this thread or catalog in your default external
+browser."
+  (interactive)
+  ;; every buffer has this local variable set
+  (browse-url q4/extlink))
+
+
 (defun q4/pop-mark ()
   "Flies backward to the last post in the mark ring at about mach 6, and
 securely disposes of the previous position."
@@ -439,11 +447,11 @@ list. Press d to show the number of photos in the list."
   (interactive)
   (save-excursion
     (q4/assert-post-start)
-    (let ((image (q4/seek-next-button)))
+    (let ((image (q4/seek-next-button t)))
       ;; conveniently, images are the first button rendered :^)
       (if (and (q4/inboundp image)
                (eql 'image (get-char-property image :q4type)))
-          (push-button)
+          (push-button image)
         (message "No image in this post.")))))
 
 
@@ -500,8 +508,10 @@ yourself :^)"
   (evil-define-key 'normal q4-mode-map
     "j" 'q4/point-to-next-post
     "k" 'q4/point-to-previous-post
+    "H" 'evil-backward-char
     "J" 'evil-next-line
     "K" 'evil-previous-line
+    "L" 'evil-forward-char
     "C-j" 'scroll-down-line
     "C-k" 'scroll-up-line
     "u" 'q4/list-urls
@@ -646,7 +656,7 @@ namespace as other operations."
             'face 'q4/gray-color
             'action `(lambda (b) (q4/load-image ,addr)))
            (insert "\n")
-           (push thumb thumbs)
+           (push thumb q4/thumbs)
            (if q4/thumbnails
                (insert (propertize (format "Loading thumbnail... (%s)\n" thumb)
                                    :q4type 'pending-thumb
@@ -905,9 +915,9 @@ mpv depending on the file type."
   (message "Loading /%s/..." board)
   (with-current-buffer buffer
     (q4-mode)
-    (setq-local q4/board board)
+    (setq-local q4/extlink (format "http://boards.4chan.org/%s/catalog" board))
     (setq-local q4/threadno "catalog")
-    (setq-local thumbs '())
+    (setq-local q4/board board)
     (dotimes (page q4/catalog-pages)
       (seq-doseq (alist (alist-get 'threads (aref json page)))
         (q4/with-api-binds
@@ -924,7 +934,7 @@ mpv depending on the file type."
   (goto-char (point-min))
   (if q4/thumbnails
       (q4/async-thumbnail-dispatch
-       buffer (reverse thumbs))
+       buffer (reverse q4/thumbs))
     (message " ")))
 
 
@@ -934,12 +944,11 @@ thread number."
   (message "Loading /%s/%s..." board thread)
   (with-current-buffer buffer
     (q4-mode)
-    (setq-local thumbs '())
-    (setq-local q4/threadno thread)
-    (setq-local q4/board board)
-    (setq-local q4/permalink
+    (setq-local q4/extlink
                 (format "http://boards.4chan.org/%s/thread/%s"
                         board thread))
+    (setq-local q4/threadno thread)
+    (setq-local q4/board board)
     (seq-doseq (alist (alist-get 'posts json))
       (q4/with-api-binds
        (q4/render-content)
@@ -962,5 +971,5 @@ thread number."
   (switch-to-buffer buffer)
   (if q4/thumbnails
       (q4/async-thumbnail-dispatch
-       buffer (reverse thumbs))
+       buffer (reverse q4/thumbs))
     (message " ")))
