@@ -705,7 +705,7 @@ downloaded to `q4/icon-path' if they haven't already been. The first time
 an item is accesed, it gets stored into the hash table `q4/icon-cache' for
 the remainder of your emacs session. Unless you delete or change the icon
 path, each icon should only ever be downloaded one time."
-  (let* ((icon (concat (s-downcase name) ".gif"))
+  (let* ((icon (concat (downcase name) ".gif"))
          (path (q4/path-join q4/icon-path icon)))
     (unless (file-exists-p q4/icon-path) (make-directory q4/icon-path))
     (or (gethash icon q4/icon-cache) ;; https://www.youtube.com/watch?v=hU7EHKFNMQg
