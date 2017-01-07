@@ -73,7 +73,6 @@
 
 (require 'derived)
 (require 'json)
-(require 'seq)
 (require 'shr)
 (require 'url)
 (require 'cl)
@@ -190,6 +189,14 @@ removed as necessary (hopefully)."
                                (substring item 0 -1) item) "/")
             item (pop items)))
     (expand-file-name (substring result 0 -1))))
+
+
+(defun q4/alist-get (key alist &optional default remove)
+  "More compatibility hacks: a build of emacs 24.3 I was testing didn't have
+this function, which is part of the built in subr library. Fuck it, copy it
+in."
+  (let ((x (assq key alist)))
+    (if x (cdr x) default)))
 
 
 (defvar q4/icon-path (q4/path-join user-emacs-directory "q4-icons")
@@ -616,7 +623,7 @@ a string or nil because I'm super good at programming."
   "A dumb macro to fetch KEY from the variable called alist, which is
 assumed to already be bound outside of this macro. It keeps code (slightly)
 tidier."
-  `(alist-get ,key alist))
+  `(q4/alist-get ,key alist))
 
 
 (defmacro q4/with-new-props (props &rest body)
@@ -797,7 +804,7 @@ path, each icon should only ever be downloaded one time."
 (defmacro q4/map-boards (statement)
   "Collect the evaluation of STATEMENT into a list, while iterating over
 the rendered json response of boards.json."
-  `(let ((response (alist-get
+  `(let ((response (q4/alist-get
                     'boards
                     (q4/get-response-data
                      (url-retrieve-synchronously
@@ -978,7 +985,7 @@ mpv depending on the file type."
     ;; into one cl-loop clause. However, I couldn't be arsed as of now,
     ;; and this Just Werks™.
     (dotimes (page (1- q4/catalog-pages))
-      (cl-loop for alist across (alist-get 'threads (aref json page)) do
+      (cl-loop for alist across (q4/alist-get 'threads (aref json page)) do
         (q4/with-api-binds
          (q4/render-content)
          (insert-button
@@ -1007,7 +1014,7 @@ thread number."
                              board thread)
           q4/threadno thread
           q4/board board)
-    (cl-loop for alist across (alist-get 'posts json) do
+    (cl-loop for alist across (q4/alist-get 'posts json) do
       (q4/with-api-binds
        (q4/render-content)
        (q4/insert-seperator)))
