@@ -1,3 +1,35 @@
+;; [Q4 Mode by @desvox (Blake DeMarcy)]
+;; [https://github.com/desvox/q4/]
+
+;; The entry point to start browsing is the interactive funtion
+;; q4/browse-board. Opening media has preference to use the third party
+;; programs feh and mpv, but soon I will implement a fallback to use the
+;; built-in image mode, which has gif support but cannot handle webms.
+
+;; Q4 attempts to bind keys to Evil's normal mode if it is installed. It
+;; also attempts to utilize helm or ivy for prompts when they are
+;; installed. It will fall back to the built-in ido-mode, and if for some
+;; arcane resason that fails, falls back to completing-read which is the
+;; same component used by vanilla functions like M-x, switch-buffer, etc.
+;; Q4 was built on GNU/Linux, in Spacemacs, but I also do testing on
+;; vanilla (unconfigured, standard) emacs installs, and on Virtualbox'd
+;; Windows 7 and 8. I have no way to test OSX support at this time.
+
+;; This file is free software; you can redistribute it and/or modify it
+;; under the terms of the GNU General Public License as published by the
+;; Free Software Foundation; either version 3, or (at your option) any
+;; later version.
+
+;; This file is distributed in the hope that it will be useful, but WITHOUT
+;; ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+;; FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+;; more details.
+
+;; You should have received a copy of the GNU General Public License along
+;; with GNU Emacs; see the file COPYING. If not, write to the Free Software
+;; Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+;; 02110-1301, USA.
+
 ;; ====================== PROGRESS ======================
 ;; DONE:
 ;;   Zero third party dependencies, works on the standard elisp library
@@ -5,19 +37,21 @@
 ;;   Fairly robust property-based navigation. (refactoring and optimization still ongoing)
 ;;   Full thumbnail support, works async in stages to keep browsing snappy
 ;;   Color highlighting for greentext, quotes, IDs, headers and seperators.
-;;   Detects quotes that reference to deleted posts, applies different face with no navigation callbacks.
+;;   Detects quotes that reference to deleted posts, applies a
+;;     different face with no navigation callbacks.
 ;;   Cap and /pol/ flag icon support.
 ;;   Tripcode and name support.
 ;;   External media support via feh and mpv
 ;;   Download full thread/catalog content with wget with interactive directory prompt
-;;   Fully tracked navigation up a reply tree with a buffer local marker stack
-;;   Generate permalinks to open threads externally (no keybind yet)
+;;   Tracked navigation up a reply tree with a buffer local marker stack
+;;   Generate permalinks to open threads externally.
 ;;   Scrape up all URLs from a post or buffer, using helm, ivy, ido, or vanilla
-;;     completeing-read to pop one open in an external browser. Comfy AF.
+;;     completeing-read to pop one open in an external browser. Super comfy.
 ;;   Cleans up all of its http request buffers.
 ;;
 ;; ======================== TODO ========================
-;; emacs 24 support (switch from seq-doseq to a while-pop or cl-loop should be all)
+;; Utilize defcustom where it makes sense.
+;; TEST: emacs 24 support (switch from seq-doseq to a while-pop or cl-loop should be all)
 ;; error handling for when json-read shits the bed at random (not often, thankfully)
 ;; switch from the json 'now' property to the epoch timestamp
 ;; add /t/ magnet support in addition the URLs
@@ -28,8 +62,7 @@
 ;; set up photo download dir to prompt for full, not relative path when var is set to nil
 ;; add optional faces for tripcodes, names, dubs/trips/quads/etc..
 ;; add dedicated color settings for 8, 16, and 256 color depths (better terminal support)
-;; negate all attemps to thumbnail while in terminal (need to make a proper display-p function)
-;; test windows support
+;; MS Windows support for external media
 ;; handle board crosslinks, and thread jump links
 ;;     related: >>DEAD links occur in ops who reference other threads
 ;; get /pol/ flags centered in the row instead of at the bottom (looks weird af)
@@ -46,8 +79,8 @@
 (require 'cl)
 
 (defvar q4/wrapwidth 80
-  "The width, in characters, of post seperators and
-when post texts will be word wrapped.")
+  "The width, in characters, of post seperators and when post texts will be
+word wrapped.")
 
 (defvar q4/keep-point-centered t
   "Keep point position consistent when navigating.")
@@ -57,19 +90,16 @@ when post texts will be word wrapped.")
 
 (defvar q4/photo-download-directory "~/Pictures/q4/"
   ;; TODO: Set this var to nil to prompt for new dir every time
-  "The top level folder where thread content can be
-downloaded to.")
+  "The top level folder where thread content can be downloaded to.")
 
 (defvar q4/show-countries t
-  "Display country names or flags in supported boards
-(/pol/). See `q4/country-type' to choose how this is
-displayed.")
+  "Display country names or flags in supported boards (/pol/). See
+`q4/country-type' to choose how this is displayed.")
 
 (defvar q4/country-type 'flag
-  "When `q4/show-countries' is non-nil, this symbol
-determines the rendering type. You can use the symbols
-'flag, 'name, 'abbrev, 'flag/name, and 'flag/abbrev.
-Pretend, in this example, that % is a flag icon :^)
+  "When `q4/show-countries' is non-nil, this symbol determines the
+rendering type. You can use the symbols 'flag, 'name, 'abbrev, 'flag/name,
+and 'flag/abbrev. Pretend, in this example, that % is a flag icon :^)
 
 'flag: %
 'name: Great Britain
@@ -78,32 +108,28 @@ Pretend, in this example, that % is a flag icon :^)
 'flag/abbrev: % GB")
 
 (defvar q4/catalog-pages 6
-  "number of pages to load from the catalog. Max is
-10.")
+  "number of pages to load from the catalog. Max is 10.")
 
 (defvar q4/dead-quote-string ">>DEAD"
-  "String to insert for quotes that refer to deleted
-posts. The face `q4/dead-quote-color' is applied as
-well.")
+  "String to insert for quotes that refer to deleted posts. The face
+`q4/dead-quote-color' is applied as well.")
 
 (defvar q4/thumbnails t
-  "Render thumbnails in the catalog and threads when
-non nil. Disabling this speeds up browsing a lot, even
-with async thumbnailing. Use the t key to switch this
-on the fly.")
+  "Render thumbnails in the catalog and threads when non nil. Disabling
+this speeds up browsing a lot, even with async thumbnailing. Use the t key
+to switch this on the fly. Any value set here is silently overridden if you
+are using a terminal or your emacs build doesn't have image support.")
 
 (defvar q4/header-indicator "||>"
-  "A string to insert at the beginning of each
-post/thread before any other info. Must be at least one
-character, and navigation will be more reliable if it
-is fairly unique (though text properties are also
-checked).")
+  "A string to insert at the beginning of each post/thread before any other
+info. Must be at least one character, and navigation will be more reliable
+if it is fairly unique (though text properties are also checked).")
 
 (defvar q4/spacer "               ")
 (defvar q4/centered nil
-  "When this is non nil, q4/spacer is inserted at the
-beginning of each line. This isn't dynamic atm, you
-will have to set this to your screen width manually")
+  "When this is non nil, q4/spacer is inserted at the beginning of each
+line. This isn't dynamic atm, you will have to set this to your screen
+width manually")
 
 (defvar q4/seperator-char "-"
   "A 1-length string to draw seperators with.")
@@ -123,16 +149,30 @@ will have to set this to your screen width manually")
   "https*://[^ \n\r\t]+")
 
 (defvar q4/icon-cache (make-hash-table :test 'equal :weakness nil)
-  "https://www.youtube.com/watch?v=hU7EHKFNMQg")
-
+  ;; https://www.youtube.com/watch?v=hU7EHKFNMQg
+  "A hash table containing the gif image data for cap and flag icons, with
+their names as keys.")
 
 ;; blah blah (eq '() nil) blah blah type clarity
 (make-variable-buffer-local (defvar q4/threadpics '()
   "Buffer-local list containing all the photos in a thread."))
+
 (make-variable-buffer-local (defvar q4/mark-ring '()
   "Buffer-local list which stores navigation marks for quote hopping."))
-(make-variable-buffer-local (defvar q4/thumbs '()
-   "Buffer local containment list used for thumbnail urls."))
+
+(make-variable-buffer-local (defvar q4/thumblist '()
+  "Buffer local containment list used for thumbnail urls."))
+
+(make-variable-buffer-local (defvar q4/extlink ""
+  "Buffer local string containing the URL for this thread or catalog."))
+
+(make-variable-buffer-local (defvar q4/threadno ""
+  "Buffer local string that is either 'catalog' or the OPs post number.
+Also see `q4/extlink'" ))
+
+(make-variable-buffer-local (defvar q4/board ""
+  "Buffer local string, containing the board this buffer is visting." ))
+
 
 (defun q4/path-join (&rest items)
   "Feed this thing some strings and it will (maybe) shit out
@@ -656,8 +696,9 @@ namespace as other operations."
             'face 'q4/gray-color
             'action `(lambda (b) (q4/load-image ,addr)))
            (insert "\n")
-           (push thumb q4/thumbs)
-           (if q4/thumbnails
+           ;; this is also reversed. FIX IT AHHHH
+           (push thumb q4/thumblist)
+           (if (and (display-graphic-p) q4/thumbnails)
                (insert (propertize (format "Loading thumbnail... (%s)\n" thumb)
                                    :q4type 'pending-thumb
                                    :thumb thumb))
@@ -734,7 +775,7 @@ path, each icon should only ever be downloaded one time."
 (defmacro q4/handle-country ()
   "Handles inserting the representation of a post's country as according to
 `q4/show-countries' and `q4/country-type'"
-  '(when (and q4/show-countries country)
+  '(when (and (display-graphic-p) q4/show-countries country)
      (q4/with-new-face
       'q4/country-name-color
       (case q4/country-type
@@ -751,6 +792,17 @@ path, each icon should only ever be downloaded one time."
         ('flag/abbrev
          (insert-image (q4/get-icon country 'flag) "卐")
          (insert (format " %s " country)))))))
+
+
+(defmacro q4/map-boards (statement)
+  "Collect the evaluation of STATEMENT into a list, while iterating over
+the rendered json response of boards.json."
+  `(let ((response (alist-get
+                    'boards
+                    (q4/get-response-data
+                     (url-retrieve-synchronously
+                      "http://a.4cdn.org/boards.json" t) t))))
+     (cl-loop for alist across response collect ,statement)))
 
 
 (defmacro q4/with-api-binds (&rest body)
@@ -822,8 +874,10 @@ rendering. Loads 10, waits a bit, and re-runs itself in a few seconds.
 Rinse, repeat until list is done. User interaction begins very quickly
 after this function is first called."
   ;; this looks like a staircase lmao
-  (let (addr (count 0))
-    (while (and thumbs (< count 10))
+  (let ((url-request-extra-headers '(("Connection" . "close")))
+        (count 0) addr)
+    (while (and (buffer-live-p buffer)
+                thumbs (< count 10))
       (setq addr (pop thumbs)
             count (1+ count))
       (url-retrieve
@@ -831,21 +885,21 @@ after this function is first called."
        `(lambda (status)
           (goto-char (point-min))
           (let ((data (q4/get-response-data)))
-            (with-current-buffer ,buffer
-              (save-excursion
-                (goto-char (point-min)) ;; TODO: More robust property checks (use q4/next-pos)
-                (while (search-forward ,(format "Loading thumbnail... (%s)" addr) nil t)
-                  (when (equal ,addr (get-char-property (match-beginning 0) :thumb))
-                    (delete-region (progn (back-to-indentation) (point)) (point-at-eol))
-                    (if data (progn (insert-image (create-image data nil t))
-                                    (insert "\n"))
-                      (delete-backward-char 1))))))))
+            (when (buffer-live-p ,buffer)
+              (with-current-buffer ,buffer
+                (save-excursion
+                  (goto-char (point-min))
+                  (while (search-forward ,(format "Loading thumbnail... (%s)" addr) nil t)
+                    (when (equal ,addr (get-char-property (match-beginning 0) :thumb))
+                      (delete-region (progn (back-to-indentation) (point)) (point-at-eol))
+                      (if data (progn (insert-image (create-image data nil t))
+                                      (insert "\n"))
+                        (delete-backward-char 1)))))))))
        nil t))
-    (when thumbs
-      (run-at-time 2 nil
-                   'q4/async-thumbnail-dispatch
-                   buffer thumbs))))
-
+    (when (and thumbs (buffer-live-p buffer))
+      (run-at-time
+       2 nil 'q4/async-thumbnail-dispatch
+       buffer thumbs))))
 
 ;; (defun q4/render-tag-a (dom)
 ;; I actually havent touched this at all yet...
@@ -915,26 +969,31 @@ mpv depending on the file type."
   (message "Loading /%s/..." board)
   (with-current-buffer buffer
     (q4-mode)
-    (setq-local q4/extlink (format "http://boards.4chan.org/%s/catalog" board))
-    (setq-local q4/threadno "catalog")
-    (setq-local q4/board board)
-    (dotimes (page q4/catalog-pages)
-      (seq-doseq (alist (alist-get 'threads (aref json page)))
+    ;; have no fear, the buffer local variables are here!
+    (setq q4/extlink (format "http://boards.4chan.org/%s/catalog" board)
+          q4/threadno "catalog"
+          q4/board board)
+    ;; given that common lisp looping may be a product of a sentient
+    ;; lifeform within the language, these loops could probably be merged
+    ;; into one cl-loop clause. However, I couldn't be arsed as of now,
+    ;; and this Just Werks™.
+    (dotimes (page (1- q4/catalog-pages))
+      (cl-loop for alist across (alist-get 'threads (aref json page)) do
         (q4/with-api-binds
-          (q4/render-content)
-          (insert-button
-            (format "[r: %d | i: %d]\n" replies images)
-            'face 'q4/gray-color
-            :q4type 'thread
-            'action `(lambda (b)
-                       (q4/query ,(format "thread/%s.json" no) 'q4/thread ,board ,no)))
-          (q4/insert-seperator))))
+         (q4/render-content)
+         (insert-button
+          (format "[r: %d | i: %d]\n" replies images)
+          'face 'q4/gray-color
+          :q4type 'thread
+          'action `(lambda (b)
+                     (q4/query ,(format "thread/%s.json" no) 'q4/thread ,board ,no)))
+         (q4/insert-seperator))))
     (q4/postprocess))
   (switch-to-buffer buffer)
   (goto-char (point-min))
   (if q4/thumbnails
       (q4/async-thumbnail-dispatch
-       buffer (reverse q4/thumbs))
+       buffer (reverse q4/thumblist))
     (message " ")))
 
 
@@ -944,12 +1003,11 @@ thread number."
   (message "Loading /%s/%s..." board thread)
   (with-current-buffer buffer
     (q4-mode)
-    (setq-local q4/extlink
-                (format "http://boards.4chan.org/%s/thread/%s"
-                        board thread))
-    (setq-local q4/threadno thread)
-    (setq-local q4/board board)
-    (seq-doseq (alist (alist-get 'posts json))
+    (setq q4/extlink (format "http://boards.4chan.org/%s/thread/%s"
+                             board thread)
+          q4/threadno thread
+          q4/board board)
+    (cl-loop for alist across (alist-get 'posts json) do
       (q4/with-api-binds
        (q4/render-content)
        (q4/insert-seperator)))
@@ -958,7 +1016,9 @@ thread number."
       (while (re-search-forward ">>\\([0-9]+\\)" nil t)
         (let ((num (match-string-no-properties 1)))
           (delete-region (match-beginning 0) (match-end 0))
-          ;; TODO: Switch to q4/next-pos and use prop checking
+          ;; TODO: Switch to q4/next-pos and use prop checking.
+          ;; Hook into the span tag rendering and add a quoted
+          ;; property as labeled by the HTML itself.
           (if (save-excursion (search-backward (concat q4/header-indicator num) nil t))
               (insert-button
                (concat ">>" (if (equal num thread) "OP" num))
@@ -971,5 +1031,5 @@ thread number."
   (switch-to-buffer buffer)
   (if q4/thumbnails
       (q4/async-thumbnail-dispatch
-       buffer (reverse q4/thumbs))
+       buffer (reverse q4/thumblist))
     (message " ")))
