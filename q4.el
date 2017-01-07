@@ -111,13 +111,15 @@ and 'flag/abbrev. Pretend, in this example, that % is a flag icon :^)
 
 (defvar q4/dead-quote-string ">>DEAD"
   "String to insert for quotes that refer to deleted posts. The face
-`q4/dead-quote-color' is applied as well.")
+`q4/dead-quote-face' is applied as well.")
 
 (defvar q4/thumbnails t
+  ;; tfw performance is so good you dont have to warn people about
+  ;; this anymore
   "Render thumbnails in the catalog and threads when non nil. Disabling
-this speeds up browsing a lot, even with async thumbnailing. Use the t key
-to switch this on the fly. Any value set here is silently overridden if you
-are using a terminal or your emacs build doesn't have image support.")
+this speeds up browsing a bit. Use the t key to switch this on the fly. Any
+value set here is silently nil'd if you are using a terminal or your emacs
+build doesn't have image support.")
 
 (defvar q4/header-indicator "||>"
   "A string to insert at the beginning of each post/thread before any other
@@ -205,38 +207,38 @@ be safely changed, the contents will be redownloaded.")
 
 ;;;;;;;;;; TODO: Add different variants for non-true color depths ;;;;;;;;;;
 
-(defface q4/greentext-color
+(defface q4/greentext-face
   '((t (:background nil :foreground "#90a959")))
   "Face for rendering greentexts."
   :group 'q4-mode)
 
 
-(defface q4/gray-color
+(defface q4/gray-face
   '((t (:background nil :foreground "#666")))
   "Face for rendering seperators, timestamps, and other
 frilly UI elements."
   :group 'q4-mode)
 
 
-(defface q4/id-color
+(defface q4/id-face
   '((t (:background nil :foreground "#d28445")))
   "Face for rendering comment and thread ID's."
   :group 'q4-mode)
 
 
-(defface q4/country-name-color
-  '((t (:inherit 'q4/id-color)))
+(defface q4/country-name-face
+  '((t (:inherit 'q4/id-face)))
   "Face for country name and abbreviation texts."
   :group 'q4-mode)
 
 
-(defface q4/quote-color
+(defface q4/quote-face
   '((t (:background nil :foreground "#aa759f")))
   "Face for rendering quotes (ie. >>2903242)"
   :group 'q4-mode)
 
 
-(defface q4/dead-quote-color
+(defface q4/dead-quote-face
   '((t (:inherit 'error :strike-through t)))
   "Face for rendering quotes that refer to
 deleted posts."
@@ -640,8 +642,8 @@ variable named point."
 named point."
   `(let ((point (point)))
      ,@body
-     (add-face-text-property
-      point (point) ,face)))
+     (put-text-property
+      point (point) 'face ,face)))
 
 
 (defun q4/render-html-string (string &optional trim newlines-btfo)
@@ -661,7 +663,7 @@ text, when non nil"
 namespace as other operations."
   '(progn
      (q4/with-new-face
-      'q4/id-color
+      'q4/id-face
       (insert (propertize q4/header-indicator
                           :q4type 'head
                           :image img
@@ -673,7 +675,7 @@ namespace as other operations."
                  (q4/render-html-string title t t)))))
      (q4/handle-country)
      (q4/with-new-face
-      'q4/gray-color
+      'q4/gray-face
       (insert
        (format
         " %s%s@ %s\n"
@@ -700,7 +702,7 @@ namespace as other operations."
            (insert-button
             (concat (q4/render-html-string file t t) ext)
             :q4type 'image
-            'face 'q4/gray-color
+            'face 'q4/gray-face
             'action `(lambda (b) (q4/load-image ,addr)))
            (insert "\n")
            ;; this is also reversed. FIX IT AHHHH
@@ -737,7 +739,7 @@ namespace as other operations."
            ;; I dont have any other handles yet but am using
            ;; cond for when more overrides are needed.
            ((equal class "quote")
-            (q4/with-new-face 'q4/greentext-color (shr-insert sub)))
+            (q4/with-new-face 'q4/greentext-face (shr-insert sub)))
            (t (shr-insert sub)))
         (shr-descend sub)))))
 
@@ -749,9 +751,9 @@ namespace as other operations."
 
 
 (defun q4/insert-seperator ()
-  "Inserts `q4/seperator' with `q4/gray-color', and an ending property."
+  "Inserts `q4/seperator' with `q4/gray-face', and an ending property."
   (q4/with-new-face
-   'q4/gray-color
+   'q4/gray-face
    (insert (propertize (format "\n%s\n" (q4/seperator))
                        :q4type 'end))))
 
@@ -784,7 +786,7 @@ path, each icon should only ever be downloaded one time."
 `q4/show-countries' and `q4/country-type'"
   '(when (and (display-graphic-p) q4/show-countries country)
      (q4/with-new-face
-      'q4/country-name-color
+      'q4/country-name-face
       (case q4/country-type
         ('abbrev
          (insert (format "%s " country)))
@@ -982,22 +984,20 @@ mpv depending on the file type."
           q4/board board)
     ;; given that common lisp looping may be a product of a sentient
     ;; lifeform within the language, these loops could probably be merged
-    ;; into one cl-loop clause. However, I couldn't be arsed as of now,
-    ;; and this Just Werks™.
+    ;; into one cl-loop clause. However, I can't be arsed. Just Werks™.
     (dotimes (page (1- q4/catalog-pages))
       (cl-loop for alist across (q4/alist-get 'threads (aref json page)) do
         (q4/with-api-binds
          (q4/render-content)
          (insert-button
           (format "[r: %d | i: %d]\n" replies images)
-          'face 'q4/gray-color
+          'face 'q4/gray-face
           :q4type 'thread
           'action `(lambda (b)
                      (q4/query ,(format "thread/%s.json" no) 'q4/thread ,board ,no)))
          (q4/insert-seperator))))
     (q4/postprocess))
   (switch-to-buffer buffer)
-  (goto-char (point-min))
   (if q4/thumbnails
       (q4/async-thumbnail-dispatch
        buffer (reverse q4/thumblist))
@@ -1031,9 +1031,9 @@ thread number."
                (concat ">>" (if (equal num thread) "OP" num))
                :no num
                :q4type 'quoted
-               'face 'q4/quote-color
+               'face 'q4/quote-face
                'action `(lambda (b) (q4/quote-hop-backward ,num)))
-            (q4/with-new-face 'q4/dead-quote-color (insert q4/dead-quote-string))))))
+            (q4/with-new-face 'q4/dead-quote-face (insert q4/dead-quote-string))))))
     (q4/postprocess))
   (switch-to-buffer buffer)
   (if q4/thumbnails
