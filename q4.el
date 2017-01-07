@@ -1,5 +1,5 @@
 ;; [Q4 Mode by @desvox (Blake DeMarcy)]
-;; [https://github.com/desvox/q4/]
+;; [   https://github.com/desvox/q4   ]
 
 ;; The entry point to start browsing is the interactive funtion
 ;; q4/browse-board. Opening media has preference to use the third party
@@ -51,7 +51,7 @@
 ;;
 ;; ======================== TODO ========================
 ;; Utilize defcustom where it makes sense.
-;; TEST: emacs 24 support (switch from seq-doseq to a while-pop or cl-loop should be all)
+;; TEST: emacs 24 support (24.3 borked beyond hope, still need to try 24.4)
 ;; error handling for when json-read shits the bed at random (not often, thankfully)
 ;; switch from the json 'now' property to the epoch timestamp
 ;; add /t/ magnet support in addition the URLs
@@ -356,7 +356,12 @@ they were posted. This also works in the catalogs."
 
 (defun q4/point-to-next-post ()
   "Feeds starving children in Africa, and does a better job at it then Vim."
-  (interactive) (q4/point-to-post 'next))
+  (interactive)
+  (q4/point-to-post 'next)
+  ;; TODO: Document this...
+  (let ((lastmark (car (last q4/mark-ring))))
+    (when (and (integerp lastmark) (> (point) lastmark))
+      (setq q4/mark-ring nil))))
 
 
 (defun q4/point-to-previous-post ()
@@ -443,12 +448,31 @@ busi....errr...collect all urls in the buffer."
         (message "No URLs in this post.")))))
 
 
-(defun q4/browse-content-externally ()
-  "Opens the permalink for this thread or catalog in your default external
-browser."
+(defun q4/view-content-externally ()
+  "Prompts the user to browse either the post or buffer in the default
+external browser. In this context, post is either a thread in a catalog, or
+a reply in a thread. A buffer is either a catalog or a thread number."
   (interactive)
-  ;; every buffer has this local variable set
-  (browse-url q4/extlink))
+  (let* ((prompt "Open [b]uffer, [p]ost, or [c]ancel?\n(C-g/b/p/c)>")
+         ;; additionally, allow ESC and C-c to bail. read-char handles C-g
+         ;; for free.
+         (gtfo   `(?c ?C ?\C-c ?\C-\[))
+         (buffer '(?b ?B))
+         (post   '(?p ?P))
+         (response (progn ;; workaround for it not always displaying...
+                     (message prompt)
+                     (read-char prompt))))
+    (while (not (member response (concatenate 'list buffer post gtfo)))
+      (setq response (read-char prompt)))
+    (cond
+     ((member response buffer)
+      (browse-url q4/extlink))
+     ((member response post)
+      (save-excursion
+        (q4/assert-post-start)
+        (browse-url (get-char-property (point) :link))))
+     ((member response gtfo)
+      (message "Nevermind then!")))))
 
 
 (defun q4/pop-mark ()
@@ -462,7 +486,7 @@ securely disposes of the previous position."
 
 (defun q4/ext-program-p (program &optional whine)
   "Returns whether or not PROGRAM is installed.  When WHINE is non-nil,
-will message the user about it.
+and a string, will `message' WHINE to the user.
 
 The only programs q4 takes advantage of at the moment is feh and mpv, for
 viewing images and vids/gifs respectively."
@@ -472,7 +496,7 @@ viewing images and vids/gifs respectively."
       ;; I say "congigure an alt.+" here because I'll add hooks
       ;; for custom functions Soon™. Also this message should
       ;; be less shit...
-      (message "You should install %s or configure an alternative." program))
+      (message whine))
     check))
 
 
@@ -564,6 +588,7 @@ yourself :^)"
     "C-j" 'scroll-down-line
     "C-k" 'scroll-up-line
     "u" 'q4/list-urls
+    "U" 'q4/view-content-externally
     "q" 'kill-this-buffer
     "Q" 'evil-record-macro
     "d" 'kill-this-buffer
@@ -594,7 +619,8 @@ yourself :^)"
   (local-set-key (kbd "A") 'q4/wget-threadpics)
   (local-set-key (kbd "i") 'q4/open-post-image)
   (local-set-key (kbd "o") 'q4/open-thread)
-  (local-set-key (kbd "u") 'q4/list-urls))
+  (local-set-key (kbd "u") 'q4/list-urls)
+  (local-set-key (kbd "U") 'q4/view-content-externally))
 
 
 (defun q4/query (dest callback board &optional thread)
@@ -667,12 +693,16 @@ namespace as other operations."
       (insert (propertize q4/header-indicator
                           :q4type 'head
                           :image img
-                          :no no))
+                          :no no
+                          :link
+                          (if (equal q4/threadno "catalog")
+                              (format "http://boards.4chan.org/%s/thread/%s"
+                                      q4/board no)
+                            (format "http://boards.4chan.org/%s/thread/%s#p%s"
+                                    q4/board q4/threadno no))))
       (insert no)
       (when title
-        (insert (concat
-                 " | "
-                 (q4/render-html-string title t t)))))
+        (insert (concat " | " (q4/render-html-string title t t)))))
      (q4/handle-country)
      (q4/with-new-face
       'q4/gray-face
