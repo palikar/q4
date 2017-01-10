@@ -28,8 +28,8 @@
 
 ;; DO NOT USE THE OFFICAL GNU WINDOWS BUILDS. They DO NOT have the xml, html,
 ;; or image libraries Q4 depends on. Either compile it yourself or use the
-;; link above. Emacs 24.3 and below are not supported on any platform; the
-;; shr library included before 24.4 lacks functionality that Q4 expects.
+;; link above. Emacs 24.x and below are not supported on any platform; the
+;; shr library included before 25 lacks functionality that Q4 expects.
 
 ;; This file is free software; you can redistribute it and/or modify it
 ;; under the terms of the GNU General Public License as published by the
@@ -72,7 +72,6 @@
 ;; ======================== TODO ========================
 ;; viper-mode support
 ;; Utilize defcustom where it makes sense.
-;; TEST: emacs 24 support (24.3 borked beyond hope, still need to try 24.4)
 ;; error handling for when json-read shits the bed at random (not often, thankfully)
 ;; switch from the json 'now' property to the epoch timestamp
 ;; add /t/ magnet support in addition the URLs
