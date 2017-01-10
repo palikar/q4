@@ -61,6 +61,7 @@
 ;;   External media support via feh and mpv
 ;;   Download full thread/catalog content with wget with interactive directory prompt
 ;;   Tracked navigation up a reply tree with a buffer local marker stack
+;;   Inline quote expansion to read quotes without changing position
 ;;   Generate permalinks to open threads externally.
 ;;   Scrape up all URLs from a post or buffer, using helm, ivy, ido, or vanilla
 ;;     completeing-read to pop one open in an external browser. Super comfy.
@@ -81,8 +82,6 @@
 ;; add dedicated color settings for 8, 16, and 256 color depths (better terminal support)
 ;; MS Windows support for external media
 ;; more intelligent thumbnail rendering based on buffer position.
-;; handle board crosslinks, and thread jump links
-;;     related: >>DEAD links occur in ops who reference other threads
 ;; get /pol/ flags centered in the row instead of at the bottom (looks weird af)
 ;; /pol/ ID support
 ;; tree based browsing
@@ -691,15 +690,19 @@ yourself :^)"
   "Call to the mother ship and apply CALLBACK. DEST is a string
 representing the resource you're craving. BOARD is also a string,
 representing the sorry state of your....errr, the board you want to access.
+BUFFER, which is optional or can be nil when passing addional callbacks,
+is a the buffer passed to the callback. If you don't give one yourself,
+this function will create a new buffer and name it according to DEST.
+CBARGS are all passed to the callback in the order provided.
 
 A call to this looks like:
-    (q4/query (format \"thread/%s.json\" no) 'q4/thread board no)
+    (q4/query (format \"thread/%s.json\" no) 'q4/thread board nil no)
 
-As you can see from above, this function is mostly rubbish.
-
-Applies, in the following order, the elispified json response, a titled
-buffer to do your deeds in, the board (string), and thread, which is either
-a string or nil because I'm super good at programming."
+The callback function recieves the following arguments in this order;
+json - the rendered json response
+buffer
+board
+CBARGS"
   (let ((url-request-extra-headers '(("Connection" . "close")))
         (endpoint (concat q4/base board "/" dest))
         (url-request-method "GET")
@@ -1136,7 +1139,6 @@ after this function is first called."
 (defun q4/browse-board (&optional board)
   "An interactive function which prompts for a board to start
 browsing. This is the entry point for q4."
-  ;; TODO: Add tab completion/ivy/helm/ido support for picking a board
   (interactive)
   (unless q4/all-4chan-boards
     (with-temp-message "Establishing board index..."

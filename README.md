@@ -1,5 +1,5 @@
-## >Emacs
-## >"text editor"
+**>Emacs
+>"text editor"**
 
 Q4 is a 4chan browser written purely in Emacs Lisp, using the 4chan json api. (no webscraping pleb shit)
 
