@@ -359,11 +359,21 @@ single post or catalog entry (or ENDBOUND)."
 
 
 (defun q4/fuck-whitespace (string &optional newlines-btfo)
-  "Trim leading/trailing whitespace, and optionally
-remove all inner newlines."
+  "Trim leading/trailing whitespace, and optionally remove all inner
+newlines.
+
+In emacs 25, there is a built in function, string-trim, which renders
+the latter half of this function obsolete. But not emacs 24 :^)"
   (while (and newlines-btfo (string-match "[\n\r]+" string))
     (setq string (replace-match "" t t string)))
-  (string-trim string))
+  (let ((garbage '(?\  ?\C-i ?\C-m ?\C-j ?\C-l))
+        (trailing-garbage (1- (length string)))
+        (leading-garbage 0))
+    (while (member (aref string leading-garbage) garbage)
+      (incf leading-garbage))
+    (while (member (aref string trailing-garbage) garbage)
+      (incf trailing-garbage -1))
+    (substring string leading-garbage (1+ trailing-garbage))))
 
 
 (defun q4/threadpics-string ()
@@ -890,7 +900,7 @@ with board/thread crosslinking and quotes."
                    "OP" num))
               :no num
               :q4type 'quoted
-              :quoting (string-trim (or quoting "(no text in this post)"))
+              :quoting (q4/fuck-whitespace (or quoting "(no text in this post)"))
               'face 'q4/quote-face)))
         ;; out-of-thread references come in two forms:
         ;;    a board (/pol/, /trash/, etc)
