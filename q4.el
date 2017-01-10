@@ -94,6 +94,9 @@
 (require 'url)
 (require 'cl)
 
+(when (< emacs-major-version 25)
+  (warn "Q4 WILL NOT WORK ON EMACS 24 REEEE"))
+
 (defvar q4/wrapwidth 80
   "The width, in characters, of post seperators and when post texts will be
 word wrapped.")
@@ -101,8 +104,12 @@ word wrapped.")
 (defvar q4/keep-point-centered t
   "Keep point position consistent when navigating.")
 
-(defvar q4/show-namefags t)
-(defvar q4/show-tripfags t)
+(defvar q4/show-namefags t
+  "Acknowledge attention whores. When non-nil, will show names next to post
+IDs if the user has chosen to use one. Also see `q4/show-tripfags'")
+(defvar q4/show-tripfags t
+  "Acknowledge attention whores. When non-nil, will show tripcodes next to
+post IDs if the user has chosen to use one. Also see `q4/show-namefags'")
 
 (defvar q4/photo-download-directory "~/Pictures/q4/"
   ;; TODO: Set this var to nil to prompt for new dir every time
@@ -941,7 +948,7 @@ with board/thread crosslinking and quotes."
                           (format "post %s in /%s/thread/%s/" post board thread))
                          ((stringp thread) (format "/%s/thread/%s/" board thread))
                          (t (format "/%s/" board)))
-                        " in a new buffer?"))
+                        " in a new buffer? "))
                  ,(cond
                    ((stringp post)
                     `(q4/query
