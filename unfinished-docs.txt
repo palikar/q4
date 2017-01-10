@@ -1,0 +1,60 @@
+;; Default keybinds (evil users read this too)
+;;          .______________________________________________.
+;;          | Key        | Action                          |
+;;          |------------+---------------------------------|
+;;          | n or SPC   | Jump to next post               |
+;;          |------------+---------------------------------|
+;;          | p or BKSPC | Jump to previous post           |
+;;          |------------+---------------------------------|
+;;          | N (SHFT n) | Scroll one visual line down.    |
+;;          |------------+---------------------------------|
+;;          | P (SHFT p) | Scroll one visual line up.      |
+;;          |------------+---------------------------------|
+;;          | l          | Recenter the screen.            |
+;;          |------------+---------------------------------|
+;;          | ]          | Locate the next quote in        |
+;;          |            | this post (eg >>3842042)        |
+;;          |            | and jump backward to it,        |
+;;          |            | saving your current position.   |
+;;          |            | All of your jumps are saved,    |
+;;          |            | this allows you to climb        |
+;;          |            | up and down a chain of replies. |
+;;          |------------+---------------------------------|
+;;          | [          | Jump backward from a previous   |
+;;          |            | quote jump.                     |
+;;          |------------+---------------------------------|
+;;          | i          | View current post's image       |
+;;          |            | or animation in feh/mpv         |
+;;          |------------+---------------------------------|
+;;          | o          | Open a thread from the          |
+;;          |            | catalog in a new buffer.        |
+;;          |------------+---------------------------------|
+;;          | u          | Collect all URLs in the         |
+;;          |            | current post, and select        |
+;;          |            | one to browse externally.       |
+;;          |------------+---------------------------------|
+;;          | U (SHFT u) | Open this thread, reply,        |
+;;          |            | or catalog externally.          |
+;;          |------------+---------------------------------|
+;;          | t          | Toggle thumbnail rendering.     |
+;;          |------------+---------------------------------|
+;;          | g or F5    | Refresh this thread or          |
+;;          |            | catalog.                        |
+;;          |------------+---------------------------------|
+;;          | q          | Kill the current buffer.        |
+;;          |------------+---------------------------------|
+;;          | a          | Pass a list of all this         |
+;;          |            | thread/catalog's photos         |
+;;          |            | to feh.                         |
+;;          |------------+---------------------------------|
+;;          | A (SHFT a) | Pass a list of all this         |
+;;          |            | thread/catalog's photos         |
+;;          |            | to wget, and prompt for         |
+;;          |            | the destination folder.         |
+;;          |------------+---------------------------------|
+;; For evil users:
+;;   The above still applies, but the n/p commands are mapped to j/k,
+;;      g/refresh is R (SHFT r), and the d key will also kill the current
+;;      buffer. SPC to scroll down is moved to RET. If you want to record
+;;      a key macro, use Q (SHFT q) instead. I am only a novice vim user
+;;      so I apologize if this layout feels unnatural.
