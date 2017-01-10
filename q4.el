@@ -360,31 +360,10 @@ single post or catalog entry (or ENDBOUND)."
 
 (defun q4/fuck-whitespace (string &optional newlines-btfo)
   "Trim leading/trailing whitespace, and optionally remove all inner
-newlines.
-
-In emacs 25, there is a built in function, string-trim, which renders
-the latter half of this function obsolete. But not emacs 24 :^)"
+newlines."
   (while (and newlines-btfo (string-match "[\n\r]+" string))
     (setq string (replace-match "" t t string)))
-  (let ((garbage '(?\  ?\C-i ?\C-m ?\C-j ?\C-l))
-        (trailing-garbage (1- (length string)))
-        (leading-garbage 0))
-    (while (member (aref string leading-garbage) garbage)
-      (incf leading-garbage))
-    (while (member (aref string trailing-garbage) garbage)
-      (incf trailing-garbage -1))
-    (substring string leading-garbage (1+ trailing-garbage))))
-
-
-;; some more babysitting for emacs24 users
-(defmacro q4/dom-attr (node attr)
-  "Return ATTR of NODE (required for emacs24)
-
-Emacs25+, see dom.el."
-  `(cdr (assq ,attr
-              (if (consp (car ,node))
-                  (cadr (car ,node))
-                (cadr ,node)))))
+  (string-trim string))
 
 
 (defun q4/threadpics-string ()
@@ -871,7 +850,7 @@ This is required for in-place content refreshing."
 
 (defun q4/render-tag-span (dom)
   "A slightly modified version of `shr-tag-span' which colors greentext."
-  (let ((class (q4/dom-attr dom 'class)))
+  (let ((class (dom-attr dom 'class)))
     (dolist (sub (dom-children dom))
       (if (stringp sub)
           (cond
@@ -886,9 +865,9 @@ This is required for in-place content refreshing."
 (defun q4/render-tag-a (dom)
   "This is a modification to the function `shr-tag-a', which deals
 with board/thread crosslinking and quotes."
-  (let ((url (q4/dom-attr dom 'href))
-        (title (q4/dom-attr dom 'title))
-        (class (q4/dom-attr dom 'class))
+  (let ((url (dom-attr dom 'href))
+        (title (dom-attr dom 'title))
+        (class (dom-attr dom 'class))
         (start (point))
         shr-start)
     ;; TODO: this section needs a lot of polish.
@@ -976,7 +955,7 @@ with board/thread crosslinking and quotes."
      ;; thanku based stallman
      (t (shr-generic dom)
         (when (and shr-target-id
-                   (equal (q4/dom-attr dom 'name) shr-target-id))
+                   (equal (dom-attr dom 'name) shr-target-id))
           ;; We have a zero-length <a name="foo"> element, so just
           ;; insert...  something.
           (when (= start (point))
