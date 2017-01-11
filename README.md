@@ -3,6 +3,8 @@
 
 Q4 is a 4chan browser written purely in Emacs Lisp, using the 4chan json api. (no webscraping pleb shit)
 
+![qbanner.png](???)
+
 **REQUIRES EMACS 25**
 
 This is an early stage of development, the internals are in a state of chaos as new features are being added. If you've stumbled on this repo during this stage, or if I was crazy enough to link it to you already, please refer to the header comments in q4.el, as its currently the only documentation or detailed description available.
