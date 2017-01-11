@@ -188,6 +188,10 @@ their names as keys.")
 on the first call to `q4/browse-board'.")
 
 ;; blah blah (eq '() nil) blah blah type clarity
+(make-variable-buffer-local (defvar q4/establish-data t)
+                            ;; DOCME
+                            )
+
 (make-variable-buffer-local (defvar q4/metadata '()))
 
 (make-variable-buffer-local (defvar q4/threadpics '()
@@ -703,6 +707,7 @@ yourself :^)"
     "t" 'q4/toggle-thumbnails
     "i" 'q4/open-post-image
     "o" 'q4/open-thread
+    "r" 'q4/show-replies
     "R" 'q4/refresh-page
     "}" 'q4/expand-quotes
     "{" 'q4/unexpand-quotes))
@@ -718,6 +723,7 @@ yourself :^)"
   (local-set-key (kbd "p") 'q4/point-to-previous-post)
   (local-set-key (kbd "N") 'scroll-up-line)
   (local-set-key (kbd "P") 'scroll-down-line)
+  (local-set-key (kbd "r") 'q4/show-replies)
   (local-set-key (kbd "l") 'q4/recenter)
   (local-set-key (kbd "q") 'kill-this-buffer)
   (local-set-key (kbd "]") 'q4/quote-hop-backward)
@@ -842,10 +848,10 @@ This is required for in-place content refreshing."
         when)))
      ;; TODO: use the unix timestamps and make a when-like string out of it
      ;; (local timezone support!)
-     (q4/append no q4/postnos)
+     (when q4/establish-data (q4/append no q4/postnos))
      (if img
          (progn
-           (q4/append img q4/threadpics)
+           (when q4/establish-data (q4/append img q4/threadpics))
            (insert-button
             (concat file ext)
             :q4type 'image
@@ -863,23 +869,25 @@ This is required for in-place content refreshing."
        (insert "\n"))
      (when comment (insert comment))
      (insert "\n\n")
-     (push
-      (cons
-       (string-to-int no)
-       `((comment . ,comment)
-         (title   . ,title)
-         (thumb   . ,thumb)
-         (time    . ,time)
-         (trip    . ,trip)
-         (link    . ,link)
-         (name    . ,name)
-         (file    . ,file)
-         (image   . ,img)
-         (id      . ,id)
-         (replies . ,nil)))
-      ;; It looks odd but ,nil is not a typo. Without doing that, all
-      ;; the cdrs get the same pointer.
-      q4/metadata)))
+     (when q4/establish-data
+       (push
+        (cons
+         (string-to-int no)
+         `((comment . ,comment)
+           (apidata . ,alist)
+           (title   . ,title)
+           (thumb   . ,thumb)
+           (time    . ,time)
+           (trip    . ,trip)
+           (link    . ,link)
+           (name    . ,name)
+           (file    . ,file)
+           (image   . ,img)
+           (id      . ,id)
+           (replies . ,nil)))
+        ;; It looks odd but ,nil is not a typo. Without doing that, all
+        ;; the cdrs get the same pointer.
+        q4/metadata))))
 
 
 (defun q4/render-tag-span (dom)
@@ -912,9 +920,11 @@ with board/thread crosslinking and quotes."
           (let* ((num (substring url 2))
                  (quoting (q4/get-post-property 'comment num q4/parent-buffer))
                  (parent q4/current-no))
-            (with-current-buffer q4/parent-buffer
-              (setcdr (last (assq 'replies (assq (string-to-int num) q4/metadata)))
-                      (cons parent nil)))
+            (when q4/establish-data
+              (with-current-buffer q4/parent-buffer
+                ;; assign the parent post a reply attribute for this quote
+                (setcdr (last (assq 'replies (assq (string-to-int num) q4/metadata)))
+                        (cons parent nil))))
             (insert
              (propertize
               (concat
@@ -1126,11 +1136,12 @@ path, each icon should only ever be downloaded one time."
                 board "/" (int-to-string (q4/@ 'tim)) "s.jpg")))
 
           (comment
-           (let ((comment (q4/@ 'com)))
+           (let ((comment (q4/@ 'com))
+                 (parent-buffer (current-buffer)))
              (if comment
                  (with-current-buffer (get-buffer-create " *q4 rendering*")
                    (erase-buffer)
-                   (setq-local q4/parent-buffer buffer)
+                   (setq-local q4/parent-buffer parent-buffer)
                    (setq-local q4/current-no no)
                    (insert comment)
                    (goto-char (point-min))
@@ -1210,24 +1221,42 @@ after this function is first called."
       (setq q4/thumblist nil))))
 
 
+;; adding site property for when this branches past 4chan only
+(defun q4/list-all-boards (&optional cars site)
+  "Returns an ordered list of all boards available at SITE. Defaults to
+4chan. This has a side effect of blocking execution for a brief moment to
+initialize the index if it has not already been set for this session.
+
+When CARS is non-nil, returns only the board names with no additional
+details."
+  ;; this is temporary and is also flaming trash
+  (let ((boards
+         (case (or site '4chan)
+           ('4chan
+            (or q4/all-4chan-boards
+                (with-temp-message "Establishing board index..."
+                  (q4/map-boards
+                   (q4/append
+                    (list
+                     (q4/@ 'board)
+                     (q4/@ 'title)
+                     (q4/render-html-string
+                      (q4/@ 'meta_description) t t))
+                    q4/all-4chan-boards)))
+                q4/all-4chan-boards)))))
+    (if cars
+        (mapcar (lambda (b) (car b)) boards)
+      boards)))
+
+
 (defun q4/browse-board (&optional board)
   "An interactive function which prompts for a board to start
 browsing. This is the entry point for q4."
   (interactive)
-  (unless q4/all-4chan-boards
-    (with-temp-message "Establishing board index..."
-      ;; this really needs a little sugar...
-      (q4/map-boards
-       (q4/append (list (q4/@ 'board)
-                        (q4/@ 'title)
-                        (q4/render-html-string
-                         (q4/@ 'meta_description) t t))
-                  q4/all-4chan-boards))))
   (let ((board (or board
                    (q4/complete-collection
                     "(Board)> "
-                    (mapcar (lambda (b) (car b))
-                            q4/all-4chan-boards)))))
+                    (q4/list-all-boards t)))))
     (if (and board (not (string= board "")))
         (q4/query "catalog.json" 'q4/catalog board)
       (message "Nevermind then!"))))
@@ -1253,6 +1282,27 @@ top."
    (if (equal q4/threadno "catalog") "catalog.json"
      (format "thread/%s.json" q4/threadno))
    'q4/refresh-callback q4/board (current-buffer) q4/threadno))
+
+
+(defun q4/refresh-callback (json buffer board thread)
+  ;; DOCME
+  (with-current-buffer buffer
+    (if (equal thread "catalog")
+        (progn
+          (erase-buffer)
+          (q4/catalog json buffer board))
+      (save-excursion
+        (message "Parsing new content...")
+        (goto-char (point-max))
+        (cl-loop for alist across (alist-get 'posts json) do
+                 (q4/with-4chan-binds
+                  (unless (member no q4/postnos)
+                    (q4/render-content)
+                    (q4/insert-seperator)
+                    (q4/async-thumbnail-dispatch
+                     buffer q4/thumblist)))))
+      (q4/postprocess)
+      (message " "))))
 
 
 (defun q4/expand-quotes ()
@@ -1294,25 +1344,38 @@ Inserts with `q4/gray-face' and can be reversed with `q4/unexpand-quotes'"
         (goto-char (next-property-change (point)))))))
 
 
-(defun q4/refresh-callback (json buffer board thread)
+(defun q4/show-replies (&optional post)
   ;; DOCME
-  (with-current-buffer buffer
-    (if (equal thread "catalog")
-        (progn
-          (erase-buffer)
-          (q4/catalog json buffer board nil))
-      (save-excursion
-        (message "Parsing new content...")
-        (goto-char (point-max))
-        (cl-loop for alist across (alist-get 'posts json) do
-          (q4/with-4chan-binds
-           (unless (member no q4/postnos)
-             (q4/render-content)
-             (q4/insert-seperator)
-             (q4/async-thumbnail-dispatch
-              buffer q4/thumblist)))))
-      (q4/postprocess)
-      (message " "))))
+  ;; this is in a very early state and may be causing some wicked side effects
+  (interactive)
+  (let* ((new-buffer (get-buffer-create "*Q4 Replies*"))
+         (replies (q4/get-post-property 'replies post))
+         (parent-data q4/metadata)
+         (parent-link q4/extlink)
+         (parent-thread q4/threadno)
+         (q4/establish-data nil)
+         (board q4/board))
+    (if (not replies)
+        (message "No replies to this post.")
+      (with-current-buffer new-buffer
+        (erase-buffer)
+        (q4-mode)
+        (setq-local q4/metadata parent-data)
+        ;; (setq-local q4/establish-data nil)
+        (setq q4/extlink parent-link
+              q4/threadno parent-thread
+              q4/board board)
+        (cl-loop for reply in replies do
+                 (let ((alist (q4/get-post-property 'apidata reply)))
+                   (q4/with-4chan-binds
+                    (q4/render-content)
+                    (q4/insert-seperator))))
+        (goto-char (point-min))
+        (q4/postprocess)
+        (when q4/thumbnails
+          (q4/async-thumbnail-dispatch
+           new-buffer q4/thumblist)))
+      (pop-to-buffer new-buffer))))
 
 
 (defun q4/load-image (addr)
