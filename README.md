@@ -3,7 +3,7 @@
 
 Q4 is a 4chan browser written purely in Emacs Lisp, using the 4chan json api. (no webscraping pleb shit)
 
-![qbanner.png](???)
+[![LOOK I CAN USE GIMP](https://raw.githubusercontent.com/desvox/q4/brainfuck/qbanner.png)](#banner)
 
 **REQUIRES EMACS 25**
 
