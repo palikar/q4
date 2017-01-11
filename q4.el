@@ -386,6 +386,17 @@ single post or catalog entry (or ENDBOUND)."
   (> (or endbound (q4/sep-pos)) marker))
 
 
+(defun q4/boip (&optional marker)
+  "Returns t when point is at the beginning of indentation OR at the
+beginning of the line at column 0. This is equivalent to `bolp' except it
+also checks `back-to-indentation'"
+  (let ((point (or marker (point))))
+    (save-excursion
+      (back-to-indentation)
+      (or (= point (point))
+          (= point (point-at-bol))))))
+
+
 (defmacro q4/append (newelt list)
   "Adds NEWELT to the end of LIST in place. LIST may be nil, this
 will add its first element if needed."
@@ -1245,7 +1256,11 @@ top."
 
 
 (defun q4/expand-quotes ()
-  ;; DOCME
+  "Insert the parent comments of all quotes in the current post. This is
+not recursive; if you want to view the contents of a quote in the parent
+text, use `q4/quote-hop-backward' to navigate to it normally.
+
+Inserts with `q4/gray-face' and can be reversed with `q4/unexpand-quotes'"
   (interactive)
   (save-excursion
     (q4/assert-post-start)
@@ -1256,10 +1271,9 @@ top."
           (setq text (get-char-property next :quoting)
                 no (get-char-property next :no))
           (goto-char next)
-          ;; FIXME: Needs adjustments for when this condition is met.
-          (unless (bolp)
+          (unless (q4/boip)
             (insert (propertize "\n" :q4type 'expanded)))
-          (goto-char (next-property-change next))
+          (goto-char (next-property-change (point)))
           (insert
            (propertize
             (concat "\n" text "\n")
@@ -1270,7 +1284,7 @@ top."
 
 
 (defun q4/unexpand-quotes ()
-  ;; DOCME
+  "Collapses quotes created by `q4/expand-quotes'"
   (interactive)
   (save-excursion
     (q4/assert-post-start)
