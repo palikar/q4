@@ -536,26 +536,34 @@ busi....errr...collect all urls in the buffer."
 (defun q4/view-content-externally ()
   "Prompts the user to browse either the post or buffer in the default
 external browser. In this context, post is either a thread in a catalog, or
-a reply in a thread. A buffer is either a catalog or a thread number."
+a reply in a thread. A buffer is either a catalog or a thread number. If
+the current post has an image, include an option for it as well."
   (interactive)
-  (let* ((prompt "Open [b]uffer, [p]ost, or [c]ancel?\n(C-g/b/p/c)>")
+  (let* ((imglink (q4/get-post-property 'image))
+         (postlink (q4/get-post-property 'link))
+         (prompt (format "Open [b]uffer, [p]ost, %sor [c]ancel?\n(C-g/q/b/p/c%s)>"
+                         (if imglink "[i]mage, " "")
+                         (if imglink "/i" "")))
          ;; additionally, allow ESC and C-c to bail. read-char handles C-g
          ;; for free.
          (gtfo   `(?q ?Q ?c ?C ?\C-c ?\C-\[))
          (buffer '(?b ?B))
          (post   '(?p ?P))
+         (image  '(?i ?I))
          (response (progn ;; workaround for it not always displaying...
                      (message prompt)
                      (read-char prompt))))
-    (while (not (member response (concatenate 'list buffer post gtfo)))
+    (while (not (member response (concatenate
+                                  'list buffer post
+                                  gtfo (if imglink image))))
       (setq response (read-char prompt)))
     (cond
      ((member response buffer)
       (browse-url q4/extlink))
      ((member response post)
-      (save-excursion
-        (q4/assert-post-start)
-        (browse-url (get-char-property (point) :link))))
+      (browse-url postlink))
+     ((member response image)
+      (browse-url imglink))
      ((member response gtfo)
       (message "Nevermind then!")))))
 
