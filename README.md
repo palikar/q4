@@ -1,7 +1,6 @@
-    >Emacs
-    >"text editor"
+# Browse 4chan completely in ~~parenthesis~~ Emacs Lisp.
 
-Q4 is a 4chan browser written purely in Emacs Lisp, using the 4chan json api. (no webscraping pleb shit)
+[![LOOK I CAN USE GIMP](https://raw.githubusercontent.com/desvox/q4/brainfuck/qbanner.png)](#banner)
 
 **REQUIRES EMACS 25**
 
@@ -10,6 +9,7 @@ This is an early stage of development, the internals are in a state of chaos as 
 This repo currently has two branches, master and the brainfuck branch. Master is kept mostly stable and usable, brainfuck is where I'm doing large amounts of changes that cause regressions across the program that need to be reworked. In that branch I am moving things to a buffer-local metadata system which allows for much more useful and reliable features, like reply threading and tree-sorted browsing (like reddit comments). As the name implies, it may be only somewhat functional at any given time.
 
 A few bullet points:
+  * Uses the JSON api, no web scraping pleb shit.
   * No third party dependencies, just a recent build of GNU Emacs (25+).
   * Full thumbnail support
   * Full resolution media support with the 3rd party programs `feh` and `mpv`

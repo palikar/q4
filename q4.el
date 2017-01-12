@@ -3,9 +3,13 @@
 
 ;; Commentary:
 
-;; q4.el is not a masterpiece. Q4's path of development is shove it in and
-;; apply lubricant later. This disclaimer will be removed when the bleeding
-;; stops. Code aside, browsing itself has gotten to be a rather nice experience.
+;; q4.el is a fucking masterpiece. The crude hacks, lack of error handling,
+;; verbosity of solutions, and the lack of testing outshine the Mona Lisa.
+;; When I write code, I shove it in there, and if it bleeds, I smile and
+;; laugh and push it in dee...errr, polish it later :^)
+
+;; Kidding aside: this is not finished software. It wont break your emacs
+;; but it not be what you are expecting yet.
 
 ;; The entry point to start browsing is the interactive funtion
 ;; q4/browse-board. Opening media has preference to use the third party
@@ -52,6 +56,7 @@
 ;;   Evil (when installed) and vanilla emacs keybinds out of the box.
 ;;   Fairly robust property-based navigation. (refactoring and optimization still ongoing)
 ;;   Full thumbnail support, works async in stages to keep browsing snappy
+;;   Reply threading support (interface needs work and better keybinds)
 ;;   Color highlighting for greentext, quotes, IDs, headers and seperators.
 ;;   Detects quotes that reference to deleted posts, applies a
 ;;     different face with no navigation callbacks.
@@ -73,12 +78,14 @@
 ;; viper-mode support
 ;; Utilize defcustom where it makes sense.
 ;; error handling for when json-read shits the bed at random (not often, thankfully)
+;;   on further investigation it seems this is stemming from some abnormalities in
+;;   in 4chan's response data. It appears to be binary data? Are they randomly compressing
+;;   shit? i dunno but i havent figured out who's fault it is.
+;;     FURTHER EVEN: Messing with the accepted encoding headers doesn't seem to be helping.
 ;; switch from the json 'now' property to the epoch timestamp
 ;; add /t/ magnet support in addition the URLs
-;; quote hopping forward, 'threading' (eg "show replies to this post")
 ;; set up photo download dir to prompt for full, not relative path when var is set to nil
 ;; add optional faces for tripcodes, names, dubs/trips/quads/etc..
-;; add dedicated color settings for 8, 16, and 256 color depths (better terminal support)
 ;; MS Windows support for external media
 ;; more intelligent thumbnail rendering based on buffer position.
 ;; get /pol/ flags centered in the row instead of at the bottom (looks weird af)
@@ -94,7 +101,7 @@
 (require 'cl)
 
 (when (< emacs-major-version 25)
-  (warn "Q4 WILL NOT WORK ON EMACS 24 REEEE"))
+  (warn "Q4 WILL NOT WORK ON EMACS 24"))
 
 (defvar q4/wrapwidth 80
   "The width, in characters, of post seperators and when post texts will be
@@ -186,9 +193,27 @@ their names as keys.")
 on the first call to `q4/browse-board'.")
 
 ;; blah blah (eq '() nil) blah blah type clarity
+(make-variable-buffer-local (defvar q4/establish-data t
+  "When this is non nil, `q4/render-content' and all of it's worker
+functions will do side effects to buffer variables, like pushing new data
+to `q4/metadata' and `q4/postnos', etc. This can be bound as nil in a `let'
+block to temporatily disable side effects for the renderer."))
+
+(make-variable-buffer-local (defvar q4/metadata '()
+ "A buffer local alist with cars for each post number, containing
+information about the posts like replies, image data, etc. The keys are
+stored as integers and not strings! `q4/get-post-property' is a wrapper to
+access data from this list; it will convert input from a string to integer
+if needed."))
+
 (make-variable-buffer-local (defvar q4/threadpics '()
   "Buffer-local list containing links to the full-resolution photos in a
-thread."))
+thread in the order they were posted."))
+
+(make-variable-buffer-local (defvar q4/reply-ring '()
+  ;; UNIMPLEMENTED
+  "Buffer-local list which stores post IDs and point positions while browsing
+through replies."))
 
 (make-variable-buffer-local (defvar q4/mark-ring '()
   "Buffer-local list which stores navigation marks for quote hopping."))
@@ -211,80 +236,64 @@ Also see `q4/extlink'"))
   "Buffer local string containing the board this buffer is visting." ))
 
 
-
-(defun q4/path-join (&rest items)
-  ;; FIXME: Surely this shit is built in somewhere? Figure it out pajeet.
-  "Feed this thing some strings and it will (maybe) shit out
-a (possibly) coherent path name with slashes added or
-removed as necessary (hopefully).
-
-Used to create paths for the icon cache, and `q4/wget-threadpics'."
-  ;; This functionality is provided by the third party
-  ;; lib https://github.com/rejeep/f.el but AGGGHHHHHHH fuck
-  ;; melpa bloat ((t. spacemacs user)), I'll write my own
-  ;; shitty implementaion. Don't yell at me please.
-  (let ((item (pop items))
-        (result ""))
-    (while item (setq result
-      (concat result
-        (if (equal ?/ (aref item (1- (length item))))
-            (substring item 0 -1) item) "/")
-          item (pop items)))
-    (expand-file-name (substring result 0 -1))))
-
-
-(defun q4/alist-get (key alist &optional default)
-  "More compatibility hacks: a build of emacs 24.3 I was testing didn't have
-this function, which is part of the built in subr library. Fuck it, copy it
-in.
-
-Checks ALIST for an element whose car is KEY, returns cdr when present, else
-DEFAULT"
-  (let ((x (assq key alist)))
-    (if x (cdr x) default)))
-
-
-(defvar q4/icon-path (q4/path-join user-emacs-directory "q4-icons")
+(defvar q4/icon-path (expand-file-name "q4-icons" user-emacs-directory)
   "Path where cap and flag icons are stored in. This can
 be safely changed, the contents will be redownloaded.")
 
-;;;;;;;;;; TODO: Add different variants for non-true color depths ;;;;;;;;;;
 
 (defface q4/greentext-face
-  '((t (:background nil :foreground "#90a959")))
+  '((((type graphic) (background dark))
+     :background nil :foreground "#90a959")
+    (((type graphic) (background light))
+     :background nil :foreground "DarkOliveGreen")
+    (t :backround nil :foreground "green"))
   "Face for rendering greentexts."
   :group 'q4-mode)
 
 
 (defface q4/gray-face
-  '((t (:background nil :foreground "#666")))
+  '((((type graphic) (background dark))
+     :background nil :foreground "#666")
+    (((type graphic) (background light))
+     :background nil :foreground "SlateGray")
+    (t :background nil :foreground nil))
   "Face for rendering seperators, timestamps, and other
 frilly UI elements."
   :group 'q4-mode)
 
 
 (defface q4/id-face
-  '((t (:background nil :foreground "#d28445")))
+  '((((type graphic) (background dark))
+     :background nil :foreground "#d28445")
+    (((type graphic) (background light))
+     :background nil :foreground "IndianRed4")
+    (t :background nil :foreground "cyan"))
   "Face for rendering comment and thread ID's."
   :group 'q4-mode)
 
 
-(defface q4/country-name-face
-  '((t (:inherit 'q4/id-face)))
-  "Face for country name and abbreviation texts."
-  :group 'q4-mode)
-
-
 (defface q4/quote-face
-  '((t (:background nil :foreground "#aa759f")))
+  '((((type graphic) (background dark))
+     :background nil :foreground "#aa759f")
+    (((type graphic) (background light))
+     :background nil :foreground "MediumOrchid4")
+    (t :background nil :foreground "magenta"))
   "Face for rendering quotes (ie. >>2903242)"
   :group 'q4-mode)
 
 
 (defface q4/dead-quote-face
-  '((t (:inherit 'error :strike-through t)))
+  '((((type graphic))
+     :inherit 'error :strike-through t)
+    (t (:inherit 'error :underline t)))
   "Face for rendering quotes that refer to
 deleted posts."
+  :group 'q4-mode)
+
+
+(defface q4/country-name-face
+  '((t :inherit 'q4/id-face))
+  "Face for country name and abbreviation texts."
   :group 'q4-mode)
 
 
@@ -295,8 +304,9 @@ deleted posts."
 
 
 (defun q4/next-pos (string &optional regex prop backward group bound)
-  "Takes a string and returns the char position of the beginning of its
+  "Takes a STRING and returns the char position of the beginning of its
 next occurence from point in `current-buffer'. Returns nil if not found.
+A simpler way to call this is to use `q4/next-prop'.
 
 When REGEX is non-nil, STRING is interpreted as a regular expression.
 
@@ -305,7 +315,7 @@ value for a property.  This can either be a symbol or a cons cell. If it's
 a symbol, the property key used is :q4type. As a cons, The key and expected
 value are given, eg '(:q4type . end)
 
-Backward, when non-nil, does what it says on the tin.
+BACKWARD, when non-nil, does what it says on the tin.
 
 When GROUP is non-nil and an integer, returns start pos of that match
 group. When PROP is in effect, it checks property at this position instead
@@ -331,21 +341,27 @@ BOUND can be a buffer position (integer) that the search will not exceed."
           (setq found t)))
       (when found (match-beginning group)))))
 
-
 ;; and lets also add a few shorthand functions for the
 ;; ones searched the most...
 
+(defun q4/next-prop (prop &optional backward bound)
+  "A simpler way to call `q4/next-pos' that only looks for properties and
+doesn't match an input string. This is morally equivalent to:
+  (q4/next-pos \".\" t PROP BACKWARD nil BOUND)"
+  (q4/next-pos  "."  t prop backward nil bound))
+  ;; A+ symmetry
+
 
 (defun q4/head-pos (&optional backward)
-  "Return char position of the next header block of a post. BACKWARD, when
-non nil, goes...uh, backward."
+  "Return char position of the next header block of a post from point.
+BACKWARD, when non nil, goes...uh, backward."
   (q4/next-pos q4/header-indicator nil 'head backward))
 
 
 (defun q4/sep-pos (&optional backward)
   "Return char position of the next seperator block between
 posts. BACKWARD, when non nil, goes...uh, to Vegas."
-  (q4/next-pos (q4/seperator) nil 'end backward))
+  (q4/next-prop 'end backward))
 
 
 (defun q4/assert-post-start ()
@@ -358,10 +374,57 @@ effects."
     (let ((check (q4/head-pos t))) (when check (goto-char check)))))
 
 
+(defun q4/current-post (&optional int buffer)
+  "Returns the post number point is currently focused on."
+  (with-current-buffer (or buffer (current-buffer))
+    (let ((no (save-excursion
+                (q4/assert-post-start)
+                (get-char-property (point) :no))))
+      (if int (string-to-int no) no))))
+
+
+(defun q4/get-post-property (prop &optional post buffer)
+  "Consults `q4/metadata' for PROP of POST in BUFFER. POST, if omitted,
+uses `q4/current-post'. POST can be provided either as an integer or a
+string. BUFFER defaults to `current-buffer', remember that `q4/metadata'
+is buffer-local.
+
+Returns either the cdr of PROP (which can be a nil value) or nil if it
+isn't in the list."
+  (when (stringp (setq post (or post (q4/current-post t))))
+    (setq post (string-to-int post)))
+  (with-current-buffer (or buffer (current-buffer))
+    (alist-get prop (assq post q4/metadata))))
+
+
+(defun q4/prop-at-point (prop)
+  "Gets the property PROP from the character at point. See
+`get-char-property'."
+  (get-char-property (point) prop))
+
+
 (defun q4/inboundp (marker &optional endbound)
   "Returns t when a given char position is within the boundaries of a
 single post or catalog entry (or ENDBOUND)."
   (> (or endbound (q4/sep-pos)) marker))
+
+
+(defun q4/boip (&optional marker)
+  "Returns t when point is at the beginning of indentation OR at the
+beginning of the line at column 0. This is equivalent to `bolp' except it
+also checks `back-to-indentation'"
+  (let ((point (or marker (point))))
+    (save-excursion
+      (back-to-indentation)
+      (or (= point (point))
+          (= point (point-at-bol))))))
+
+
+(defmacro q4/append (newelt list)
+  "Adds NEWELT to the end of LIST in place. LIST may be nil, this
+will add its first element if needed."
+  ;; blah blah nconc does shit in place blah blah doesnt work when the list is nil
+  `(setq ,list (nconc ,list (cons ,newelt nil))))
 
 
 (defun q4/fuck-whitespace (string &optional newlines-btfo)
@@ -379,21 +442,20 @@ they were posted. This also works in the catalogs."
   ;; The laziest possible way of turning a list to
   ;; a usable string is to pass it to format, and chop
   ;; the parens off of it's representation :^)
-  ;; TODO: not that (maybe)
 
   (when q4/threadpics
-    (substring (format "%s" (reverse q4/threadpics)) 1 -1)))
+    (substring (format "%s" q4/threadpics) 1 -1)))
 
 
 (defun q4/point-to-post (dir)
-  "Move point to the head of post in DIR. DIR can be one of the symbols
+  "Move point to the head of next post in DIR. DIR can be one of the symbols
 'next and 'prev."
   (let ((check
-   (case dir
-     ('prev (q4/head-pos t))
-     ('next (save-excursion ;; or else point will stick
-        (forward-char (length q4/header-indicator))
-        (q4/head-pos))))))
+         (case dir
+           ('prev (q4/head-pos t))
+           ('next (save-excursion ;; or else point will stick
+                    (forward-char (length q4/header-indicator))
+                    (q4/head-pos))))))
     (when check (goto-char check) (q4/recenter))))
 
 
@@ -401,7 +463,9 @@ they were posted. This also works in the catalogs."
   "Feeds starving children in Africa, and does a better job at it then Vim."
   (interactive)
   (q4/point-to-post 'next)
-  ;; TODO: Document this...
+  ;; Whenever using quote-hop-backward, its easy to lose track of what you're
+  ;; doing and possibly leave the ring in an unclean state. This clears the
+  ;; list if manual navigation exceeds the position of first jump
   (let ((lastmark (car (last q4/mark-ring))))
     (when (and (integerp lastmark) (> (point) lastmark))
       (setq q4/mark-ring nil))))
@@ -412,11 +476,12 @@ they were posted. This also works in the catalogs."
   (interactive) (q4/point-to-post 'prev))
 
 
-(defun q4/seek-next-button (&optional pos-only)
-  "Yes."
+(defun q4/seek-next-button (&optional goto)
+  "Returns buffer position if the next button from POINT. if GOTO is
+non-nil, moves point to the button."
   (interactive)
   (let ((pos (overlay-start (next-button (point)))))
-    (if pos-only pos (goto-char pos))))
+    (if goto (goto-char pos) pos)))
 
 
 (defun q4/seek-post (number &optional mark forward nocenter)
@@ -442,15 +507,11 @@ SEEK, if provided as a string, will search for that post number
 directly. When nil, it will locate the next quote within the current post
 and jump to it, if it exists."
   (interactive)
-  (unless seek
-    (save-excursion ;\\; wow \\i su\\re lo\\ve \\\\\\\e\\l\\i\\s\\p re\\ge\\x
-      (let* ((quoted (re-search-forward ">>\\([0-9]+\\|OP\\)" (q4/sep-pos) t))
-             (string (match-string-no-properties 1))
-             (pos (match-beginning 0)))
-        (when (eql 'quoted (get-char-property pos :q4type))
-          (setq seek (if (equal string "OP") q4/threadno string))))))
-  (if seek (q4/seek-post seek t)
-    (message "No quotes found in this post.")))
+  (if (or seek ;; if the caller didn't provide a num, find next quote
+          (let ((next (q4/next-prop 'quoted nil (q4/sep-pos))))
+            (when next (setq seek (get-char-property next :no)))))
+      (q4/seek-post seek t)
+    (message "No quotes between point and end of post.")))
 
 
 (defun q4/complete-collection (prompt collection)
@@ -474,7 +535,7 @@ vanilla emacs `completing-read'"
            (require 'ido)
            (ido-completing-read prompt collection nil t))
           (t (completing-read
-              "(Use TAB to complete a URL)> "
+              "(Use TAB to complete)> "
               collection nil t)))))
     choice))
 
@@ -491,6 +552,7 @@ vanilla emacs `completing-read'
 
 If WHOLE-BUFFER is non nil, it will also put AMD out of
 busi....errr...collect all urls in the buffer."
+  ;; TODO: Isolate URLs from parenthesis if needed
   (interactive)
   (save-excursion
     (if whole-buffer (goto-char (point-min)) (q4/assert-post-start))
@@ -498,11 +560,11 @@ busi....errr...collect all urls in the buffer."
       (save-excursion
         ;; [[ D O U B L E  D E C K E R  E X C U R S I O N  P R O T E C T I O N  S Q U A D ]]
         (while (re-search-forward q4/url-regexp bound t)
-          (push (match-string 0) collection)))
+          (q4/append (match-string 0) collection)))
       (if collection
           (let ((choice (q4/complete-collection
                          "(Browse URL)> "
-                         (nreverse collection))))
+                         collection)))
             (if choice (browse-url choice) (message "Nevermind then!")))
         (message "No URLs in this post.")))))
 
@@ -510,26 +572,34 @@ busi....errr...collect all urls in the buffer."
 (defun q4/view-content-externally ()
   "Prompts the user to browse either the post or buffer in the default
 external browser. In this context, post is either a thread in a catalog, or
-a reply in a thread. A buffer is either a catalog or a thread number."
+a reply in a thread. A buffer is either a catalog or a thread number. If
+the current post has an image, includes an option for it as well."
   (interactive)
-  (let* ((prompt "Open [b]uffer, [p]ost, or [c]ancel?\n(C-g/b/p/c)>")
-         ;; additionally, allow ESC and C-c to bail. read-char handles C-g
+  (let* ((imglink (q4/get-post-property 'image))
+         (postlink (q4/get-post-property 'link))
+         (prompt (format "Open [b]uffer, [p]ost, %sor [c]ancel?\n(C-g/q/b/p/c%s)>"
+                         (if imglink "[i]mage, " "")
+                         (if imglink "/i" "")))
+         ;; additionally, allow q, ESC and C-c to bail. read-char handles C-g
          ;; for free.
          (gtfo   `(?q ?Q ?c ?C ?\C-c ?\C-\[))
          (buffer '(?b ?B))
          (post   '(?p ?P))
+         (image  '(?i ?I))
          (response (progn ;; workaround for it not always displaying...
                      (message prompt)
                      (read-char prompt))))
-    (while (not (member response (concatenate 'list buffer post gtfo)))
+    (while (not (member response (concatenate
+                                  'list buffer post
+                                  gtfo (if imglink image))))
       (setq response (read-char prompt)))
     (cond
      ((member response buffer)
       (browse-url q4/extlink))
      ((member response post)
-      (save-excursion
-        (q4/assert-post-start)
-        (browse-url (get-char-property (point) :link))))
+      (browse-url postlink))
+     ((member response image)
+      (browse-url imglink))
      ((member response gtfo)
       (message "Nevermind then!")))))
 
@@ -579,11 +649,8 @@ list. Press d to show the number of photos in the list."
   (interactive)
   (save-excursion
     (q4/assert-post-start)
-    (let ((image (q4/seek-next-button t)))
-      ;; conveniently, images are the first button rendered :^)
-      (if (and (q4/inboundp image)
-               (eql 'image (get-char-property image :q4type)))
-          (push-button image)
+    (let ((image (q4/next-prop 'image nil (q4/sep-pos))))
+      (if image (push-button image)
         (message "No image in this post.")))))
 
 
@@ -593,10 +660,9 @@ buffer. Will complain otherwise."
   (interactive)
   (save-excursion
     (q4/assert-post-start)
-    (if (and (re-search-forward "\\[r: [0-9]" nil t)
-             (eql 'thread (get-char-property (point) :q4type)))
-        (push-button)
-      (message "Not a catalog entry."))))
+    (let ((button (q4/next-prop 'thread nil (q4/sep-pos))))
+      (if button (push-button button)
+        (message "Not a catalog entry.")))))
 
 
 (defun q4/wget-threadpics (&optional name)
@@ -615,10 +681,12 @@ thread)."
                 (or name (read-string
                           (format "(Folder Name)> %s"
                                   q4/photo-download-directory))))
-               (path (q4/path-join q4/photo-download-directory
-                                   (if (string= input "")
-                                       (format "%s.%s" q4/board q4/threadno)
-                                     input))))
+               (path
+                (expand-file-name
+                 (if (string= input "")
+                     (format "%s.%s" q4/board q4/threadno)
+                   input)
+                 q4/photo-download-directory)))
           (start-process-shell-command
            "q4-wget" nil (format "DEST=%s; mkdir $DEST; cd $DEST; wget %s"
                                  path pics)))
@@ -644,8 +712,6 @@ yourself :^)"
     "J" 'evil-next-line
     "K" 'evil-previous-line
     "L" 'evil-forward-char
-    "C-j" 'scroll-down-line
-    "C-k" 'scroll-up-line
     "u" 'q4/list-urls
     "U" 'q4/view-content-externally
     "q" 'kill-this-buffer
@@ -658,6 +724,7 @@ yourself :^)"
     "t" 'q4/toggle-thumbnails
     "i" 'q4/open-post-image
     "o" 'q4/open-thread
+    "r" 'q4/show-replies
     "R" 'q4/refresh-page
     "}" 'q4/expand-quotes
     "{" 'q4/unexpand-quotes))
@@ -673,6 +740,7 @@ yourself :^)"
   (local-set-key (kbd "p") 'q4/point-to-previous-post)
   (local-set-key (kbd "N") 'scroll-up-line)
   (local-set-key (kbd "P") 'scroll-down-line)
+  (local-set-key (kbd "r") 'q4/show-replies)
   (local-set-key (kbd "l") 'q4/recenter)
   (local-set-key (kbd "q") 'kill-this-buffer)
   (local-set-key (kbd "]") 'q4/quote-hop-backward)
@@ -709,7 +777,9 @@ json - the rendered json response
 buffer
 board
 CBARGS"
-  (let ((url-request-extra-headers '(("Connection" . "close")))
+  (let ((url-request-extra-headers
+         '(("Accept-Encoding" . "identity") ;; FIXME: Verify this is actually doing anything
+           ("Connection" . "close")))
         (endpoint (concat q4/base board "/" dest))
         (url-request-method "GET")
         (buffer (or buffer
@@ -719,17 +789,22 @@ CBARGS"
     (url-retrieve
      endpoint
      `(lambda (status)
-        (apply
-         ',callback
-         (q4/get-response-data nil t)
-         ,buffer ,board ',cbargs)))))
+        (if (setq status (plist-get status :error))
+            (case (caddr status)
+              (404 (message "Thread has 404'd")
+                   (kill-buffer (current-buffer))
+                   (kill-buffer ,buffer)))
+          (apply
+           ',callback
+           (q4/get-response-data nil t)
+           ,buffer ,board ',cbargs))))))
 
 
 (defmacro q4/@ (key)
   "A dumb macro to fetch KEY from the variable called alist, which is
 assumed to already be bound outside of this macro. It keeps code (slightly)
 tidier."
-  `(q4/alist-get ,key alist))
+  `(alist-get ,key alist))
 
 
 (defmacro q4/with-new-props (props &rest body)
@@ -772,55 +847,37 @@ This is required for in-place content refreshing."
   '(progn
      (q4/with-new-face
       'q4/id-face
-      (insert (propertize
-               q4/header-indicator
-               :q4type 'head
-               :image img
-               :no no
-               :link
-               (if (equal q4/threadno "catalog")
-                   (format "http://boards.4chan.org/%s/thread/%s"
-                           q4/board no)
-                 (format "http://boards.4chan.org/%s/thread/%s#p%s"
-                         q4/board q4/threadno no))))
+      (insert
+       (propertize
+        q4/header-indicator
+        :q4type 'head
+        :no no))
       (insert no)
-      (when title
-        (insert (concat " | " (q4/render-html-string title t t)))))
+      (when title (insert (concat " | " title))))
      (q4/handle-country)
      (q4/with-new-face
       'q4/gray-face
       (insert
        (format
         " %s%s@ %s\n"
-        (let (rendered)
-          ;; blech bleck blech bleck
-          (if (and q4/show-namefags name (stringp name)
-                   (not (equal name "Anonymous"))
-                   (setq rendered (q4/render-html-string name t t)))
-              (if (not (string= rendered ""))
-                  (format "by %s " rendered)
-                "")
-            ""))
-        (if (and q4/show-tripfags trip (stringp trip) (not (string= trip "")))
-          (concat trip " ") "")
+        (if (and q4/show-namefags name)
+            (format "by %s " name) "")
+        (if (and q4/show-tripfags trip)
+            (concat trip " ") "")
         when)))
      ;; TODO: use the unix timestamps and make a when-like string out of it
      ;; (local timezone support!)
-     (push no q4/postnos)
+     (when q4/establish-data (q4/append no q4/postnos))
      (if img
-         (let* ((base (concat "http://i.4cdn.org/" board "/" filestamp))
-                (thumb (concat base "s.jpg"))
-                (addr (concat base ext)))
-           (push addr q4/threadpics)
-           ;; FIXME: This makes the list go in reverse. Fix that.
+         (progn
+           (when q4/establish-data (q4/append img q4/threadpics))
            (insert-button
-            (concat (q4/render-html-string file t t) ext)
+            (concat file ext)
             :q4type 'image
             'face 'q4/gray-face
-            'action `(lambda (b) (q4/load-image ,addr)))
+            'action `(lambda (b) (q4/load-image ,img)))
            (insert "\n")
-           ;; this is also reversed. FIX IT AHHHH
-           (push thumb q4/thumblist)
+           (q4/append thumb q4/thumblist)
            (if (and (display-graphic-p) q4/thumbnails)
                (insert
                 (propertize
@@ -829,29 +886,27 @@ This is required for in-place content refreshing."
                  :thumb thumb))
              (insert "\n")))
        (insert "\n"))
-     (when comment
-       (let ((rendered
-              (with-current-buffer (get-buffer-create " *q4 rendering*")
-                (erase-buffer)
-                (setq-local q4/parent-buffer buffer)
-                (insert comment)
-                (goto-char (point-min))
-                ;; libxml chokes on these, and shr handles
-                ;; sane word wrapping just fine without them.
-                (while (search-forward "<wbr>" nil t)
-                  (replace-match ""))
-                (shr-render-region (point-min) (point-max))
-                ;; there are some magical hooks lying around
-                ;; which modify shr's behaviour. See
-                ;; `q4/with-api-binds'.
-                (buffer-substring (point-min) (point-max)))))
-         (insert rendered)
-         (save-excursion
-           (q4/assert-post-start)
-           (put-text-property
-            (point) (+ (point) (length q4/header-indicator))
-            :comment rendered))))
-     (insert "\n\n")))
+     (when comment (insert comment))
+     (insert "\n\n")
+     (when q4/establish-data
+       (push
+        (cons
+         (string-to-int no)
+         `((comment . ,comment)
+           (apidata . ,alist)
+           (title   . ,title)
+           (thumb   . ,thumb)
+           (time    . ,time)
+           (trip    . ,trip)
+           (link    . ,link)
+           (name    . ,name)
+           (file    . ,file)
+           (image   . ,img)
+           (id      . ,id)
+           (replies . ,nil)))
+        ;; It looks odd but ,nil is not a typo. Without doing that, all
+        ;; the cdrs get the same pointer.
+        q4/metadata))))
 
 
 (defun q4/render-tag-span (dom)
@@ -882,34 +937,39 @@ with board/thread crosslinking and quotes."
       (if (eq ?# (aref url 0))
           ;; check for the #p prefix for in-thread anchors
           (let* ((num (substring url 2))
-                 (quoting (with-current-buffer q4/parent-buffer
-                            (save-excursion
-                              (goto-char (point-min))
-                              (q4/seek-post num nil t t)
-                              (get-char-property (point) :comment)))))
+                 (quoting (q4/get-post-property 'comment num q4/parent-buffer))
+                 (parent q4/current-no))
+            (when q4/establish-data
+              (with-current-buffer q4/parent-buffer
+                ;; assign the parent post a reply attribute for this quote
+                (setcdr (last (assq 'replies (assq (string-to-int num) q4/metadata)))
+                        (cons parent nil))))
             (insert
              (propertize
               (concat
                ">>"
-               (if (string= (with-current-buffer q4/parent-buffer
-                              q4/threadno) num)
+               (if (string= num (with-current-buffer q4/parent-buffer q4/threadno))
                    "OP" num))
               :no num
               :q4type 'quoted
-              :quoting (q4/fuck-whitespace (or quoting "(no text in this post)"))
+              :quoting (substring-no-properties
+                        (q4/fuck-whitespace
+                         (or quoting "(no text in this post)")))
               'face 'q4/quote-face)))
         ;; out-of-thread references come in two forms:
         ;;    a board (/pol/, /trash/, etc)
         ;;    a board AND thread (/g/thread/58391828#p58391828)
         ;; They are not distinguished by class or id, as such,
         ;; we must fall back to s\\h\it\\ l\\ik\e t\\his\\.
+        ;; FIXME: Needs support for searches and verification that the board exists!
+        ;;   this is getting in the way of quality shitposts like >>>/reddit/
         (string-match
          ;; G1: board, mandatory        G2: threadno            G3: postno
          "^/\\([^/]+\\)\\(?:/thread/\\)*\\([0-9]+\\)*\\(?:#p\\)*\\([0-9]+\\)*"
          url)
-        (let* ((board  (match-string 1 url))
-               (thread (match-string 2 url))
-               (post   (match-string 3 url)))
+        (let ((board  (match-string 1 url))
+              (thread (match-string 2 url))
+              (post   (match-string 3 url)))
 
           ;; MEGA HAX (+ 27 1990): Its easy to lose context in this mess, but right
           ;; now we are in a child rendering buffer, " *q4/rendering*" as
@@ -974,8 +1034,10 @@ with board/thread crosslinking and quotes."
 
 (defmacro q4/map-boards (&rest body)
   "Evaluates BODY while iterating over the rendered json response of
-boards.json. The data is bound to the variable named alist."
-  `(let ((response (q4/alist-get
+boards.json. The data is bound to the variable named alist, which can be
+accessed with `q4/@' This does no collection of data on its own; thats left
+to the caller."
+  `(let ((response (alist-get
                     'boards
                     (q4/get-response-data
                      (url-retrieve-synchronously
@@ -998,26 +1060,54 @@ boards.json. The data is bound to the variable named alist."
 
 
 (defun q4/get-icon (name &optional type)
- "Returns an image object for a 4chan icon resource. The icons are
-downloaded to `q4/icon-path' if they haven't already been. The first time
-an item is accesed, it gets stored into the hash table `q4/icon-cache' for
-the remainder of your emacs session. Unless you delete or change the icon
-path, each icon should only ever be downloaded one time."
+ "Returns an image object for a 4chan icon resource. NAME should be a
+string indicating the name of the resource on the server. To get the United
+States flag, call this as (q4/get-icon \"US\" 'flag). The name is downcased
+and the \".gif\" extention is appended to the request.
+
+The icons are downloaded to `q4/icon-path' if they haven't already been.
+The first time an item is accesed, it gets stored into the hash table
+`q4/icon-cache' for the remainder of your emacs session. Unless you delete
+or change the icon path, each icon should only ever be downloaded one
+time.
+
+If the request fails or the data can not be decoded for whatever reason,
+this function will return nil. A+ error handling."
   (let* ((icon (concat (downcase name) ".gif"))
-         (path (q4/path-join q4/icon-path icon)))
+         (path (expand-file-name icon q4/icon-path)))
     (unless (file-exists-p q4/icon-path) (make-directory q4/icon-path))
     (or (gethash icon q4/icon-cache) ;; https://www.youtube.com/watch?v=hU7EHKFNMQg
         (if (file-exists-p path)
             ;; https://www.youtube.com/watch?v=hU7EHKFNMQg
             (puthash icon (create-image path) q4/icon-cache) ;; https://www.youtube.com/watch?v=hU7EHKFNMQg
           ;; https://www.youtube.com/watch?v=hU7EHKFNMQg
-          (let ((data (q4/get-response-data
-                       (url-retrieve-synchronously
-                        (concat q4/icon-base (if (eql type 'flag) "country/" "") icon) t))))
+          (message "Indexing new icon: %s (%s)" name path)
+          (let ((data (ignore-errors
+                        (q4/get-response-data
+                         (url-retrieve-synchronously
+                          (concat
+                           q4/icon-base
+                           (if (eql type 'flag) "country/" "")
+                           icon) t)))))
             ;; https://www.youtube.com/watch?v=hU7EHKFNMQg
-            (with-temp-file path (insert data)) ;; https://www.youtube.com/watch?v=hU7EHKFNMQg
-            (puthash icon (create-image data nil t) q4/icon-cache))))))
+            (let ((rendered (ignore-errors (create-image data nil t))))
+              (if (not rendered)
+                  (puthash icon nil q4/icon-cache)
+                (with-temp-file path (insert data)) ;; https://www.youtube.com/watch?v=hU7EHKFNMQg
+                (puthash icon rendered q4/icon-cache))))))))
               ;; https://www.youtube.com/watch?v=hU7EHKFNMQg
+
+
+(defun q4/insert-icon (icon &optional type)
+  "Inserts ICON (see `q4/get-icon') at point, with a trailing space.
+If the resource fails to be fetched for any reason, inserts ICON
+surrounded in brackets with a trailing space."
+  ;; This needs real error handling...
+  (let ((image (q4/get-icon icon type)))
+    (if (not image)
+        (insert (format "[%s] " icon))
+      (insert-image image "%")
+      (insert " "))))
 
 
 (defmacro q4/handle-country ()
@@ -1031,56 +1121,96 @@ path, each icon should only ever be downloaded one time."
          (insert (format "%s " country)))
         ('name
          (insert (format "%s " (q4/@ 'country_name))))
-        ('flag
-         (insert-image (q4/get-icon country 'flag) "卐")
-         (insert " "))
+        ('flag (q4/insert-icon country 'flag))
         ('flag/name
-         (insert-image (q4/get-icon country 'flag) "卐")
-         (insert (format " %s " (q4/@ 'country_name))))
+         (q4/insert-icon country 'flag)
+         (insert (format "%s " (q4/@ 'country_name))))
         ('flag/abbrev
-         (insert-image (q4/get-icon country 'flag) "卐")
-         (insert (format " %s " country)))))))
+         (q4/insert-icon country 'flag)
+         (insert (format "%s " country)))))))
 
 
-(defmacro q4/with-api-binds (&rest body)
+(defmacro q4/with-4chan-binds (&rest body)
   "Sets all the variables needed by the rendering and organization of
-posts. Also handles some stuff for shr's html rendering."
+4chan posts. Also handles some stuff for shr's html rendering."
   `(let* (;; first bind some stuff for shr,
           ;; which renders the html contents
           ;; of all the comments. Binding it
           ;; in let allows these settings to
           ;; never persist outside of q4's
           ;; activities...
-          (url-request-extra-headers '(("Connection" . "close")))
+          (url-request-extra-headers
+           '(("Accept-Encoding" . "identity")
+             ("Connection" . "close")))
           (shr-external-rendering-functions
            '((span . q4/render-tag-span)
              (a . q4/render-tag-a)))
           (shr-width q4/wrapwidth)
           (shr-use-fonts nil)
           ;; ...and now the json api properties
-          (filestamp (let ((num (q4/@ 'tim)))
-                       (if (numberp num) (int-to-string num) num)))
-          (no (let ((num (q4/@ 'no)))
-                (if (numberp num) (int-to-string num) num)))
           (bumpdeath (equal (q4/@ 'bumplimit) 1))
           (imgdeath (equal (q4/@ 'imagelimit) 1))
           (archived (equal (q4/@ 'archived) 1))
+          (no (int-to-string (q4/@ 'no)))
           (replies (q4/@ 'replies))
           (country (q4/@ 'country))
           (images (q4/@ 'images))
-          (file (q4/@ 'filename))
-          (comment (q4/@ 'com))
           (cap (q4/@ 'capcode))
-          (title (q4/@ 'sub))
           (trip (q4/@ 'trip))
-          (name (q4/@ 'name))
           (time (q4/@ 'time))
           (when (q4/@ 'now))
           (tag (q4/@ 'tag))
           (ext (q4/@ 'ext))
           (id (q4/@ 'id))
-          (img (if file (concat "http://i.4cdn.org/"
-                                board "/" filestamp ext))))
+
+          (link
+           (if (equal q4/threadno "catalog")
+               (format "http://boards.4chan.org/%s/thread/%s"
+                       q4/board no)
+             (format "http://boards.4chan.org/%s/thread/%s#p%s"
+                     q4/board q4/threadno no)))
+
+          (file
+           (let ((file (q4/@ 'filename)))
+             (if file (q4/render-html-string file t t))))
+
+          (img
+           (if file
+               (concat
+                "http://i.4cdn.org/"
+                board "/" (int-to-string (q4/@ 'tim)) ext)))
+
+          (thumb
+           (if file
+               (concat
+                "http://i.4cdn.org/"
+                board "/" (int-to-string (q4/@ 'tim)) "s.jpg")))
+
+          (comment
+           (let ((comment (q4/@ 'com))
+                 (parent-buffer (current-buffer)))
+             (if comment
+                 (with-current-buffer (get-buffer-create " *q4 rendering*")
+                   (erase-buffer)
+                   (setq-local q4/parent-buffer parent-buffer)
+                   (setq-local q4/current-no no)
+                   (insert comment)
+                   (goto-char (point-min))
+                   ;; libxml chokes on these, and shr handles
+                   ;; sane word wrapping just fine without them.
+                   (while (search-forward "<wbr>" nil t)
+                     (replace-match ""))
+                   (shr-render-region (point-min) (point-max))
+                   (buffer-substring (point-min) (point-max))))))
+
+          (name
+           (let ((name (q4/@ 'name)))
+             (if (and name (not (member name '("" "Anonymous"))))
+                 (q4/render-html-string name t t))))
+
+          (title
+           (let ((title (q4/@ 'sub)))
+             (if title (q4/render-html-string title t t)))))
      ,@body))
 
 
@@ -1113,7 +1243,8 @@ rendering. Loads 10, waits a bit, and re-runs itself in a few seconds.
 Rinse, repeat until list is done. User interaction begins very quickly
 after this function is first called."
   ;; this looks like a staircase lmao
-  (let ((url-request-extra-headers '(("Connection" . "close")))
+  (let ((url-request-extra-headers
+         '(("Connection" . "close")))
         (count 0) addr)
     (while (and (buffer-live-p buffer)
                 thumbs (< count 10))
@@ -1142,25 +1273,42 @@ after this function is first called."
       (setq q4/thumblist nil))))
 
 
+;; adding site property for when this branches past 4chan only
+(defun q4/list-all-boards (&optional cars site)
+  "Returns an ordered list of all boards available at SITE. Defaults to
+4chan. This has a side effect of blocking execution for a brief moment to
+initialize the index if it has not already been set for this session.
+
+When CARS is non-nil, returns only the board names with no additional
+details."
+  ;; this is temporary and is also flaming trash
+  (let ((boards
+         (case (or site '4chan)
+           ('4chan
+            (or q4/all-4chan-boards
+                (with-temp-message "Establishing board index..."
+                  (q4/map-boards
+                   (q4/append
+                    (list
+                     (q4/@ 'board)
+                     (q4/@ 'title)
+                     (q4/render-html-string
+                      (q4/@ 'meta_description) t t))
+                    q4/all-4chan-boards)))
+                q4/all-4chan-boards)))))
+    (if cars
+        (mapcar (lambda (b) (car b)) boards)
+      boards)))
+
+
 (defun q4/browse-board (&optional board)
   "An interactive function which prompts for a board to start
 browsing. This is the entry point for q4."
   (interactive)
-  (unless q4/all-4chan-boards
-    (with-temp-message "Establishing board index..."
-      ;; this really needs a little sugar...
-      (q4/map-boards
-       (push (list (q4/@ 'board)
-                   (q4/@ 'title)
-                   (q4/render-html-string
-                    (q4/@ 'meta_description) t t))
-             q4/all-4chan-boards)))
-    (setq q4/all-4chan-boards (nreverse q4/all-4chan-boards)))
   (let ((board (or board
                    (q4/complete-collection
                     "(Board)> "
-                    (mapcar (lambda (b) (car b))
-                            q4/all-4chan-boards)))))
+                    (q4/list-all-boards t)))))
     (if (and board (not (string= board "")))
         (q4/query "catalog.json" 'q4/catalog board)
       (message "Nevermind then!"))))
@@ -1188,61 +1336,121 @@ top."
    'q4/refresh-callback q4/board (current-buffer) q4/threadno))
 
 
+(defun q4/refresh-callback (json buffer board thread)
+  "See `q4/refresh-page': this is just the callback function it uses for
+the URL request."
+  (with-current-buffer buffer
+    (if (equal thread "catalog")
+        (progn
+          (erase-buffer)
+          (q4/catalog json buffer board))
+      (save-excursion
+        (message "Parsing new content...")
+        (goto-char (point-max))
+        (cl-loop for alist across (alist-get 'posts json) do
+          (q4/with-4chan-binds
+           (unless (member no q4/postnos)
+             (q4/render-content)
+             (q4/insert-seperator)
+             (q4/async-thumbnail-dispatch
+              buffer q4/thumblist)))))
+      (q4/postprocess)
+      (message " "))))
+
+
 (defun q4/expand-quotes ()
+  "Insert the parent comments of all quotes in the current post. This is
+not recursive; if you want to view the contents of a quote in the parent
+text, use `q4/quote-hop-backward' to navigate to it normally.
+
+Inserts with `q4/gray-face' and can be reversed with `q4/unexpand-quotes'"
   (interactive)
   (save-excursion
     (q4/assert-post-start)
-    (unless (q4/next-pos "." t 'expanded nil nil (q4/sep-pos))
-      (let* ((bound (q4/sep-pos))
-             (next (q4/next-pos ">>" nil 'quoted nil nil bound))
+    (unless (q4/next-prop 'expanded nil (q4/sep-pos))
+      (let ((next (q4/next-prop 'quoted nil (q4/sep-pos)))
              no text)
         (while next
-          (setq no (get-char-property next :no)
-                text (get-char-property next :quoting))
+          (setq text (get-char-property next :quoting)
+                no (get-char-property next :no))
           (goto-char next)
-          (unless (bolp)
+          (unless (q4/boip)
             (insert (propertize "\n" :q4type 'expanded)))
-          (re-search-forward "\\([0-9]+\\|OP\\)")
+          (goto-char (next-property-change (point)))
           (insert
            (propertize
             (concat "\n" text "\n")
             :q4type 'expanded
             'face 'q4/gray-face))
-          (setq next (q4/next-pos
-                      ">>" nil 'quoted
-                      nil nil (q4/sep-pos)))))))
+          (setq next (q4/next-prop 'quoted nil (q4/sep-pos)))))))
   (q4/recenter))
 
 
 (defun q4/unexpand-quotes ()
+  "Collapses quotes created by `q4/expand-quotes'"
   (interactive)
   (save-excursion
     (q4/assert-post-start)
-    (let ((bound (q4/sep-pos)))
-      (while (q4/inboundp (point) bound)
-        (if (eq 'expanded (get-char-property (point) :q4type))
-            (delete-forward-char 1)
-          (right-char 1))))))
+    (while (q4/inboundp (point) (q4/sep-pos))
+      (if (eq 'expanded (get-char-property (point) :q4type))
+          (delete-region (point) (next-property-change (point)))
+        (goto-char (next-property-change (point)))))))
 
 
-(defun q4/refresh-callback (json buffer board thread)
-  (with-current-buffer buffer
-    (if (equal thread "catalog")
-        (progn
-          (erase-buffer)
-          (q4/catalog json buffer board nil))
-      (save-excursion
-        (message "Parsing new content...")
-        (goto-char (point-max))
-        (cl-loop for alist across (q4/alist-get 'posts json) do
-          (q4/with-api-binds
-           (unless (member no q4/postnos)
+(defun q4/btfo ()
+  ;; DOCME
+  ;; Fuck it, how about WRITEME
+  (interactive)
+  (cond
+   ((bound-and-true-p q4/replyview-p)
+    (let* ((ring (with-current-buffer q4/parent-buffer
+                   (pop q4/reply-ring))))
+      (if (not ring)
+          (quit-window)
+        (q4/show-replies (car ring))
+        (goto-char (cdr ring)))))))
+
+
+(defun q4/show-replies (&optional post)
+  ;; DOCME
+  ;; this is in a very early state, may be causing some wicked side effects,
+  ;; and is a crude hack. Polish comes later.
+  (interactive)
+  (let* ((buffer (get-buffer-create "*Q4 Replies*"))
+         (parent-buffer (current-buffer))
+         (post (or post (q4/current-post)))
+         (replies (q4/get-post-property 'replies post))
+         (descending-p (eq (current-buffer) buffer))
+         (parent-thread q4/threadno)
+         (parent-data q4/metadata)
+         (parent-link q4/extlink)
+         (q4/establish-data nil)
+         (board q4/board))
+    (if (not replies)
+        (message "No replies to this post.")
+      (when descending-p
+        (push (cons post (point)) q4/reply-ring))
+      (with-current-buffer buffer
+        (erase-buffer)
+        (q4-mode)
+        (setq-local q4/metadata parent-data)
+        (setq-local q4/parent-buffer parent-buffer)
+        (setq-local q4/replyview-p t)
+        (setq q4/extlink parent-link
+              q4/threadno parent-thread
+              q4/board board)
+        (cl-loop for reply in replies do
+          (let ((alist (q4/get-post-property 'apidata reply)))
+            (q4/with-4chan-binds
              (q4/render-content)
-             (q4/insert-seperator)
-             (q4/async-thumbnail-dispatch
-              buffer (reverse q4/thumblist))))))
-      (q4/postprocess)
-      (message " "))))
+             (q4/insert-seperator))))
+        (goto-char (point-min))
+        (q4/postprocess)
+        (when q4/thumbnails
+          (q4/async-thumbnail-dispatch
+           buffer q4/thumblist)))
+      (funcall (if descending-p 'switch-to-buffer 'pop-to-buffer)
+               buffer))))
 
 
 (defun q4/load-image (addr)
@@ -1311,8 +1519,8 @@ optionally center the buffer when `q4/centered' is non-nil."
     ;; lifeform within the language, these loops could probably be merged
     ;; into one cl-loop clause. However, I can't be arsed. Just Werks™.
     (dotimes (page (1- q4/catalog-pages))
-      (cl-loop for alist across (q4/alist-get 'threads (aref json page)) do
-        (q4/with-api-binds
+      (cl-loop for alist across (alist-get 'threads (aref json page)) do
+        (q4/with-4chan-binds
          (q4/render-content)
          (insert-button
           (format "[r: %d | i: %d]\n" replies images)
@@ -1330,7 +1538,7 @@ optionally center the buffer when `q4/centered' is non-nil."
   (message " ")
   (when q4/thumbnails
     (q4/async-thumbnail-dispatch
-     buffer (reverse q4/thumblist))))
+     buffer q4/thumblist)))
 
 
 (defun q4/thread (json buffer board thread)
@@ -1344,8 +1552,8 @@ thread number."
                   board thread)
           q4/threadno thread
           q4/board board)
-    (cl-loop for alist across (q4/alist-get 'posts json) do
-      (q4/with-api-binds
+    (cl-loop for alist across (alist-get 'posts json) do
+      (q4/with-4chan-binds
        (q4/render-content)
        (q4/insert-seperator)))
     (goto-char (point-min))
@@ -1357,9 +1565,11 @@ thread number."
   (message " ")
   (when q4/thumbnails
     (q4/async-thumbnail-dispatch
-     buffer (reverse q4/thumblist))))
+     buffer q4/thumblist)))
 
 
 (defun q4/subthread (json buffer board thread post)
   (q4/thread json buffer board thread)
   (q4/seek-post post nil t))
+
+;; HI IM DAISY
