@@ -94,6 +94,7 @@
 ;; 8chan support, maybe a few others, when more progress is made for 4chan.
 ;; ======================================================
 
+(require 'jka-compr)
 (require 'derived)
 (require 'json)
 (require 'shr)
@@ -936,21 +937,22 @@ with board/thread crosslinking and quotes."
      ((equal class "quotelink")
       (if (eq ?# (aref url 0))
           ;; check for the #p prefix for in-thread anchors
-          (let* ((num (substring url 2))
-                 (quoting (q4/get-post-property 'comment num q4/parent-buffer))
-                 (parent q4/current-no))
+          (let* ((quoted-num (substring url 2))
+                 (quoting (q4/get-post-property 'comment quoted-num q4/parent-buffer))
+                 (current-post q4/current-no))
             (when q4/establish-data
               (with-current-buffer q4/parent-buffer
                 ;; assign the parent post a reply attribute for this quote
-                (setcdr (last (assq 'replies (assq (string-to-int num) q4/metadata)))
-                        (cons parent nil))))
+                (unless (member current-post (q4/get-post-property 'replies quoted-num))
+                  (setcdr (last (assq 'replies (assq (string-to-int quoted-num) q4/metadata)))
+                        (cons current-post nil)))))
             (insert
              (propertize
               (concat
                ">>"
-               (if (string= num (with-current-buffer q4/parent-buffer q4/threadno))
-                   "OP" num))
-              :no num
+               (if (string= quoted-num (with-current-buffer q4/parent-buffer q4/threadno))
+                   "OP" quoted-num))
+              :no quoted-num
               :q4type 'quoted
               :quoting (substring-no-properties
                         (q4/fuck-whitespace
