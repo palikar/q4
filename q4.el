@@ -11,10 +11,22 @@
 ;; Kidding aside: this is not finished software. It wont break your emacs
 ;; but it not be what you are expecting yet.
 
+;; if you get a json-read-table error when making requests, this is caused
+;; by the responses being gzipped for some godforesaken reason. I've tried
+;; messing with the headers to get 4chan to stop sending them but it looks
+;; like I'll have to implement gzip parsing somehow. I really want q4 to
+;; be windows compatible but using the unix gzip program seems my best option.
+;; I am looking into how to solve this reliably.
+
 ;; The entry point to start browsing is the interactive funtion
 ;; q4/browse-board. Opening media has preference to use the third party
 ;; programs feh and mpv, but soon I will implement a fallback to use the
 ;; built-in image mode, which has gif support but cannot handle webms.
+
+;; If the colors are ugly, they try to set themselves based on whether
+;; your theme is dark or light using emacs' own face system. If this
+;; fails for you, please look at the functions q4/set-light-colors
+;; and q4/set-dark-colors: they will force the right ones into place.
 
 ;; Q4 attempts to bind keys to Evil's normal mode if it is installed. It
 ;; also attempts to utilize helm or ivy for prompts when they are
