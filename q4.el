@@ -256,7 +256,7 @@ be safely changed, the contents will be redownloaded.")
   '((((type graphic) (background dark))
      :background nil :foreground "#666")
     (((type graphic) (background light))
-     :background nil :foreground "SlateGray")
+     :background nil :foreground "grey60")
     (t :background nil :foreground nil))
   "Face for rendering seperators, timestamps, and other
 frilly UI elements."
@@ -296,6 +296,24 @@ deleted posts."
   '((t :inherit 'q4/id-face))
   "Face for country name and abbreviation texts."
   :group 'q4-mode)
+
+
+(defun q4/set-light-colors ()
+  "Force the built-in faces to use the colors for light themes."
+  (interactive)
+  (set-face-attribute 'q4/greentext-face nil :foreground "DarkOliveGreen")
+  (set-face-attribute 'q4/id-face nil :foreground "IndianRed4")
+  (set-face-attribute 'q4/quote-face nil :foreground "MediumOrchid4")
+  (set-face-attribute 'q4/gray-face nil :foreground "grey60"))
+
+
+(defun q4/set-dark-colors ()
+  "Force the built-in faces to use the colors for dark themes."
+  (interactive)
+  (set-face-attribute 'q4/greentext-face nil :foreground "#90a959")
+  (set-face-attribute 'q4/id-face nil :foreground "#d28445")
+  (set-face-attribute 'q4/quote-face nil :foreground "#aa759f")
+  (set-face-attribute 'q4/gray-face nil :foreground "#666"))
 
 
 (defun q4/recenter ()
