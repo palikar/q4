@@ -6,6 +6,8 @@
 
 This is an early stage of development, the internals are in a state of chaos as new features are being added. If you've stumbled on this repo during this stage, or if I was crazy enough to link it to you already, please refer to the header comments in q4.el, as its currently the only documentation or detailed description available.
 
+** If you get a json-readtable error when making a request, Im working on fixing that: sometimes the api responses come in gzipped. Im waiting for this to show up again so I can add handling for it.**
+
 This repo currently has two branches, master and the brainfuck branch. Master is kept mostly stable and usable, brainfuck is where I'm doing large amounts of changes that cause regressions across the program that need to be reworked. In that branch I am moving things to a buffer-local metadata system which allows for much more useful and reliable features, like reply threading and tree-sorted browsing (like reddit comments). As the name implies, it may be only somewhat functional at any given time.
 
 A few bullet points:
@@ -14,12 +16,11 @@ A few bullet points:
   * Full thumbnail support
   * Full resolution media support with the 3rd party programs `feh` and `mpv`
   * `wget` integration to download thread photos
-  * Comfy navigation features like quote-hopping, URL scraping, and inline quote expansion.
+  * Comfy navigation features like quote-hopping, URL scraping, viewing replies, and inline quote expansion.
   * Board, thread, and post crosslink support.
   * Integrates with Evil, Helm, and Ivy when they are available.
-  * It technically works in the terminal but I need to add terminal friendly color faces.
 
-### Changes for Monday, 01-09:
+### Changes for Monday, 01-09: (more since then, too lazy to update readme aaagggg)
   * Crosslink support: jump to other boards, other threads, and posts inside threads
   * TAB and BACKTAB now bound to button-forward and backward
   * Inline quote expansion: use the curly brace keys to expand/collapse text from quoted posts.
@@ -41,6 +42,7 @@ If you use evil, these are mostly the same except j/k replace n/p, page refreshi
     [           q4/pop-mark
     {           q4/unexpand-quotes
     }           q4/expand-quotes
+    r           q4/show-replies (early implentation, needs new keybinds)
     t           q4/toggle-thumbnails
     a           q4/pass-to-feh
     A           q4/wget-threadpics
