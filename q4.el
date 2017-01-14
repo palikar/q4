@@ -9,19 +9,22 @@
 ;; laugh and push it in dee...errr, polish it later :^)
 
 ;; Kidding aside: this is not finished software. It wont break your emacs
-;; but it not be what you are expecting yet.
-
-;; if you get a json-read-table error when making requests, this is caused
-;; by the responses being gzipped for some godforesaken reason. I've tried
-;; messing with the headers to get 4chan to stop sending them but it looks
-;; like I'll have to implement gzip parsing somehow. I really want q4 to
-;; be windows compatible but using the unix gzip program seems my best option.
-;; I am looking into how to solve this reliably.
+;; but it may not be what you are expecting yet.
 
 ;; The entry point to start browsing is the interactive funtion
 ;; q4/browse-board. Opening media has preference to use the third party
 ;; programs feh and mpv, but soon I will implement a fallback to use the
 ;; built-in image mode, which has gif support but cannot handle webms.
+
+;; Sometimes, 4chan sends back gzipped responses from their API. There is
+;; no indication of when or why this happens, and it seems to only happen
+;; every few dozen requests. Unix and linux systems will need to have the
+;; the gzip utility installed, but its a very standard util thats most likely
+;; installed already. You can double check By typing 'gzip' in a command line
+;; and it will spit out a message whether or not its installed.
+
+;; If you dont have this, or you're using MS Windows, the worst case scenario
+;; is that sometimes you will have to call an action twice if it errors out.
 
 ;; If the colors are ugly, they try to set themselves based on whether
 ;; your theme is dark or light using emacs' own face system. If this
@@ -36,11 +39,12 @@
 ;; Q4 was built on GNU/Linux, in Spacemacs, but I also do testing on
 ;; vanilla (unconfigured, standard) emacs installs, and on Virtualbox'd
 ;; Windows 7 and 8. I have no way to test OSX support at this time.
+
 ;; As of this time, the Windows builds found at
 ;;                 https://sourceforge.net/projects/emacsbinw64/
 ;; are fully operational (as far as I can tell) except for external media
-;; support. Thumbnails work but don't expect the i key to pop open Windows
-;; Photo Viewer yet :^)
+;; support, and gzip support. Thumbnails work but don't expect the i key
+;; to pop open Windows Photo Viewer yet :^)
 
 ;; DO NOT USE THE OFFICAL GNU WINDOWS BUILDS. They DO NOT have the xml, html,
 ;; or image libraries Q4 depends on. Either compile it yourself or use the
@@ -85,15 +89,13 @@
 ;;   Cleans up all of its http request buffers.
 ;;   In-place thread refreshing, appending new posts at the end of the buffer.
 ;;     Catalogs need something better than the current "throw it all out" method.
+;;   Gzip response support (this may cause a *nix dependency, will investigate for
+;;   MS Windows later)
 ;;
 ;; ======================== TODO ========================
 ;; viper-mode support
+;; smooth out replies-to-post naviagtion; add backward navigation, handling to close the window, etc
 ;; Utilize defcustom where it makes sense.
-;; error handling for when json-read shits the bed at random (not often, thankfully)
-;;   on further investigation it seems this is stemming from some abnormalities in
-;;   in 4chan's response data. It appears to be binary data? Are they randomly compressing
-;;   shit? i dunno but i havent figured out who's fault it is.
-;;     FURTHER EVEN: Messing with the accepted encoding headers doesn't seem to be helping.
 ;; switch from the json 'now' property to the epoch timestamp
 ;; add /t/ magnet support in addition the URLs
 ;; set up photo download dir to prompt for full, not relative path when var is set to nil
@@ -106,7 +108,6 @@
 ;; 8chan support, maybe a few others, when more progress is made for 4chan.
 ;; ======================================================
 
-(require 'jka-compr)
 (require 'derived)
 (require 'json)
 (require 'shr)
@@ -126,6 +127,7 @@ word wrapped.")
 (defvar q4/show-namefags t
   "Acknowledge attention whores. When non-nil, will show names next to post
 IDs if the user has chosen to use one. Also see `q4/show-tripfags'")
+
 (defvar q4/show-tripfags t
   "Acknowledge attention whores. When non-nil, will show tripcodes next to
 post IDs if the user has chosen to use one. Also see `q4/show-namefags'")
@@ -755,6 +757,7 @@ yourself :^)"
     "t" 'q4/toggle-thumbnails
     "i" 'q4/open-post-image
     "o" 'q4/open-thread
+    "@" 'rename-buffer
     "r" 'q4/show-replies
     "R" 'q4/refresh-page
     "}" 'q4/expand-quotes
@@ -787,6 +790,7 @@ yourself :^)"
   (local-set-key (kbd "U") 'q4/view-content-externally)
   (local-set-key (kbd "g") 'q4/refresh-page)
   (local-set-key (kbd "<f5>") 'q4/refresh-page)
+  (local-set-key (kbd "@") 'rename-buffer)
   (local-set-key (kbd "<tab>") 'forward-button)
   (local-set-key (kbd "<backtab>") 'backward-button))
 
@@ -809,7 +813,7 @@ buffer
 board
 CBARGS"
   (let ((url-request-extra-headers
-         '(("Accept-Encoding" . "identity") ;; FIXME: Verify this is actually doing anything
+         '(("Accept-Encoding" . "identity")
            ("Connection" . "close")))
         (endpoint (concat q4/base board "/" dest))
         (url-request-method "GET")
@@ -1261,9 +1265,17 @@ object instead."
       ;; say those lines 10 times fast :^)
       (goto-char (point-min))
       (when (re-search-forward "\r?\n\r?\n" nil t)
-        (setq data (if json (json-read)
-                     (buffer-substring-no-properties
-                      (point) (point-max)))))
+        (setq data
+         (if (not json)
+             (buffer-substring-no-properties (point) (point-max))
+           (condition-case nil
+               (json-read)
+             ('json-readtable-error
+              (message "gzip response!")
+              (let ((p (point)))
+                (call-process-region (point) (point-max) "gzip" t t nil "-d")
+                (goto-char p)
+                (json-read)))))))
       (when q4/discard-request-buffers
         (kill-buffer buffer))
       data)))
@@ -1383,10 +1395,11 @@ the URL request."
           (q4/with-4chan-binds
            (unless (member no q4/postnos)
              (q4/render-content)
-             (q4/insert-seperator)
-             (q4/async-thumbnail-dispatch
-              buffer q4/thumblist)))))
+             (q4/insert-seperator)))))
       (q4/postprocess)
+      (when (and q4/thumbnails (display-graphic-p))
+        (q4/async-thumbnail-dispatch
+         buffer q4/thumblist))
       (message " "))))
 
 

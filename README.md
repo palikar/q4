@@ -6,8 +6,6 @@
 
 This is an early stage of development, the internals are in a state of chaos as new features are being added. If you've stumbled on this repo during this stage, or if I was crazy enough to link it to you already, please refer to the header comments in q4.el, as its currently the only documentation or detailed description available.
 
-**If you get a json-readtable error when making a request, Im working on fixing that: sometimes the api responses come in gzipped. Im waiting for this to show up again so I can add handling for it.**
- 
 If the colors are ugly, they try to set themselves based on whether your theme is dark or light using emacs' own face system. If this fails for you, call the functions q4/set-light-colors or q4/set-dark-colors: they will force the right ones into place.
 
 This repo currently has two branches, master and the brainfuck branch. Master is kept mostly stable and usable, brainfuck is where I'm doing large amounts of changes that cause regressions across the program that need to be reworked. In that branch I am moving things to a buffer-local metadata system which allows for much more useful and reliable features, like reply threading and tree-sorted browsing (like reddit comments). As the name implies, it may be only somewhat functional at any given time. Currently master is up to date and seems to be working okay aside from the json blip I mentioned above.
@@ -53,6 +51,7 @@ If you use evil, these are mostly the same except j/k replace n/p, page refreshi
     u           q4/list-urls
     U           q4/view-content-externally
     g           q4/refresh-page
+    @           rename-buffer
     <f5>        q4/refresh-page
     <tab>       forward-button
     <backtab>   backward-button
