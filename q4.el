@@ -18,13 +18,16 @@
 
 ;; Sometimes, 4chan sends back gzipped responses from their API. There is
 ;; no indication of when or why this happens, and it seems to only happen
-;; every few dozen requests. Unix and linux systems will need to have the
-;; the gzip utility installed, but its a very standard util thats most likely
-;; installed already. You can double check By typing 'gzip' in a command line
-;; and it will spit out a message whether or not its installed.
+;; every few dozen requests. First, Q4 will check if your build of emacs
+;; has zlib support compiled in. Most do, including the windows builds
+;; linked below. If it doesn't, your system will need to have the the gzip
+;; utility installed, but its a very standard util thats most likely
+;; installed already if you use a Unix/GNU Linux operating system. You can
+;; double check By typing 'gzip' in a command line and it will spit out a
+;; message whether or not its installed.
 
-;; If you dont have this, or you're using MS Windows, the worst case scenario
-;; is that sometimes you will have to call an action twice if it errors out.
+;; If these both fail, the worst case scenario is that sometimes you will
+;; have to call an action twice if it errors out.
 
 ;; If the colors are ugly, they try to set themselves based on whether
 ;; your theme is dark or light using emacs' own face system. If this
@@ -43,8 +46,8 @@
 ;; As of this time, the Windows builds found at
 ;;                 https://sourceforge.net/projects/emacsbinw64/
 ;; are fully operational (as far as I can tell) except for external media
-;; support, and gzip support. Thumbnails work but don't expect the i key
-;; to pop open Windows Photo Viewer yet :^)
+;; support. Thumbnails work but don't expect the i key to pop open Windows
+;; Photo Viewer yet :^)
 
 ;; DO NOT USE THE OFFICAL GNU WINDOWS BUILDS. They DO NOT have the xml, html,
 ;; or image libraries Q4 depends on. Either compile it yourself or use the
@@ -1271,9 +1274,11 @@ object instead."
            (condition-case nil
                (json-read)
              ('json-readtable-error
-              (message "gzip response!")
               (let ((p (point)))
-                (call-process-region (point) (point-max) "gzip" t t nil "-d")
+                (if (not (zlib-available-p))
+                    (call-process-region (point) (point-max) "gzip" t t nil "-d")
+                  (set-buffer-multibyte nil)
+                  (zlib-decompress-region (point) (point-max)))
                 (goto-char p)
                 (json-read)))))))
       (when q4/discard-request-buffers
