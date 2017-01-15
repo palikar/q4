@@ -243,6 +243,10 @@ through replies."))
   "A list of all the thread/reply numbers (as strings) contained in the
 current buffer."))
 
+(make-variable-buffer-local (defvar q4/content-type nil
+  "Buffer-local symbol indicating the type of content this buffer holds.
+Used to adjust actions for things like keybinds and content refreshing."))
+
 (make-variable-buffer-local (defvar q4/threadno ""
   "Buffer local string that is either 'catalog' or the OPs post number.
 Also see `q4/extlink'"))
@@ -391,7 +395,7 @@ doesn't match an input string. This is morally equivalent to:
 (defun q4/head-pos (&optional backward)
   "Return char position of the next header block of a post from point.
 BACKWARD, when non nil, goes...uh, backward."
-  (q4/next-pos q4/header-indicator nil 'head backward))
+  (q4/next-prop 'head backward))
 
 
 (defun q4/sep-pos (&optional backward)
@@ -483,16 +487,22 @@ they were posted. This also works in the catalogs."
     (substring (format "%s" q4/threadpics) 1 -1)))
 
 
-(defun q4/point-to-post (dir)
+(defun q4/point-to-post (dir &optional nocenter)
   "Move point to the head of next post in DIR. DIR can be one of the symbols
 'next and 'prev."
   (let ((check
          (case dir
            ('prev (q4/head-pos t))
-           ('next (save-excursion ;; or else point will stick
-                    (forward-char (length q4/header-indicator))
-                    (q4/head-pos))))))
-    (when check (goto-char check) (q4/recenter))))
+           ('next
+            (save-excursion ;; or else point will stick
+              (while (eq 'head (q4/prop-at-point :q4type))
+                (goto-char (next-property-change (point))))
+              (q4/head-pos))))))
+    (when check
+      (goto-char check)
+      (back-to-indentation)
+      (unless nocenter
+        (q4/recenter)))))
 
 
 (defun q4/point-to-next-post ()
@@ -690,15 +700,24 @@ list. Press d to show the number of photos in the list."
         (message "No image in this post.")))))
 
 
-(defun q4/open-thread ()
-  "When in the catalog, this will open the current post in a new
-buffer. Will complain otherwise."
+(defun q4/open-item ()
+  "When in the catalog, this will open the current post in a new buffer.
+When in a thread, this will open an image with `q4/open-post-image' if an
+image is available. In a board overview, open the current board."
   (interactive)
   (save-excursion
     (q4/assert-post-start)
-    (let ((button (q4/next-prop 'thread nil (q4/sep-pos))))
-      (if button (push-button button)
-        (message "Not a catalog entry.")))))
+    (case q4/content-type
+      ('catalog
+       (push-button (q4/next-prop 'thread nil (q4/sep-pos))))
+      ('thread (q4/open-post-image))
+      ('boardview
+       (let ((board
+              (save-excursion
+                (q4/assert-post-start)
+                (q4/prop-at-point 'board))))
+         (bury-buffer)
+         (q4/query "catalog.json" 'q4/catalog board))))))
 
 
 (defun q4/wget-threadpics (&optional name)
@@ -759,10 +778,11 @@ yourself :^)"
     "A" 'q4/wget-threadpics
     "t" 'q4/toggle-thumbnails
     "i" 'q4/open-post-image
-    "o" 'q4/open-thread
+    "o" 'q4/open-item
     "@" 'rename-buffer
     "r" 'q4/show-replies
     "R" 'q4/refresh-page
+    "B" 'q4/board-overview
     "}" 'q4/expand-quotes
     "{" 'q4/unexpand-quotes))
 
@@ -788,10 +808,11 @@ yourself :^)"
   (local-set-key (kbd "a") 'q4/pass-to-feh)
   (local-set-key (kbd "A") 'q4/wget-threadpics)
   (local-set-key (kbd "i") 'q4/open-post-image)
-  (local-set-key (kbd "o") 'q4/open-thread)
+  (local-set-key (kbd "o") 'q4/open-item)
   (local-set-key (kbd "u") 'q4/list-urls)
   (local-set-key (kbd "U") 'q4/view-content-externally)
   (local-set-key (kbd "g") 'q4/refresh-page)
+  (local-set-key (kbd "B") 'q4/board-overview)
   (local-set-key (kbd "<f5>") 'q4/refresh-page)
   (local-set-key (kbd "@") 'rename-buffer)
   (local-set-key (kbd "<tab>") 'forward-button)
@@ -1090,12 +1111,17 @@ to the caller."
   (make-string q4/wrapwidth (aref q4/seperator-char 0)))
 
 
-(defun q4/insert-seperator ()
+(defun q4/insert-seperator (&optional no-opening-newline)
   "Inserts `q4/seperator' with `q4/gray-face', and an ending property."
   (q4/with-new-face
    'q4/gray-face
-   (insert (propertize (format "\n%s\n" (q4/seperator))
-                       :q4type 'end))))
+   (insert
+    (propertize
+     (format
+      "%s%s\n"
+      (if no-opening-newline "" "\n")
+      (q4/seperator))
+     :q4type 'end))))
 
 
 (defun q4/get-icon (name &optional type)
@@ -1203,7 +1229,7 @@ surrounded in brackets with a trailing space."
           (id (q4/@ 'id))
 
           (link
-           (if (equal q4/threadno "catalog")
+           (if (eq q4/content-type 'catalog)
                (format "http://boards.4chan.org/%s/thread/%s"
                        q4/board no)
              (format "http://boards.4chan.org/%s/thread/%s#p%s"
@@ -1363,10 +1389,38 @@ browsing. This is the entry point for q4."
       (message "Nevermind then!"))))
 
 
-;; (defun q4/list-boards ()
-;;   "Pretty-print all boards to a dedicated buffer, with buttons to open them."
-;;   (interactive)
-;;   )
+(defun q4/board-overview (&optional site)
+  "Pretty-print all boards to a dedicated buffer. Use `q4/open-item', bound
+to o by default, to open a board in a new buffer."
+  (interactive)
+  (let ((buffer (get-buffer-create "*Q4 Boards*"))
+        (info (q4/list-all-boards nil (or site '4chan))))
+    (with-current-buffer buffer
+      (erase-buffer)
+      (q4-mode)
+      (setq q4/content-type 'boardview)
+      (q4/insert-seperator t)
+      (cl-loop for board in info do
+        (insert
+         (propertize
+          (format
+           "/%s/ - %s\n"
+           (car board) (cadr board))
+          'face 'q4/id-face
+          'board (car board)
+          :q4type 'head))
+        (string-match
+         ;; this gets rid of the redunant title and short description at the beginning of
+         ;; each detailed entry
+         "^\"[^\"]+?[;\"] *\\(?:is \\)*\\(.+\\)"
+         (caddr board))
+        (let ((fill-column q4/wrapwidth)
+              (p (point)))
+          (insert (match-string 1 (caddr board)))
+          (fill-region p (point)))
+        (q4/insert-seperator))
+      (goto-char (+ 1 (length (q4/seperator)) (point-min))))
+    (switch-to-buffer buffer)))
 
 
 (defun q4/refresh-page ()
@@ -1379,33 +1433,37 @@ the bottom of the buffer. This is seamless.
 In catalogs, the whole buffer is scrapped and point is returned to the
 top."
   (interactive)
-  (q4/query
-   (if (equal q4/threadno "catalog") "catalog.json"
-     (format "thread/%s.json" q4/threadno))
-   'q4/refresh-callback q4/board (current-buffer) q4/threadno))
+  (let ((dest
+         (case q4/content-type
+           ('thread
+            (format "thread/%s.json" q4/threadno))
+           ('catalog "catalog.json"))))
+    (when dest
+      (q4/query dest 'q4/refresh-callback q4/board (current-buffer) q4/content-type))))
 
 
-(defun q4/refresh-callback (json buffer board thread)
+(defun q4/refresh-callback (json buffer board type)
   "See `q4/refresh-page': this is just the callback function it uses for
 the URL request."
   (with-current-buffer buffer
-    (if (equal thread "catalog")
-        (progn
-          (erase-buffer)
-          (q4/catalog json buffer board))
-      (save-excursion
-        (message "Parsing new content...")
-        (goto-char (point-max))
-        (cl-loop for alist across (alist-get 'posts json) do
-          (q4/with-4chan-binds
-           (unless (member no q4/postnos)
-             (q4/render-content)
-             (q4/insert-seperator)))))
-      (q4/postprocess)
-      (when (and q4/thumbnails (display-graphic-p))
-        (q4/async-thumbnail-dispatch
-         buffer q4/thumblist))
-      (message " "))))
+    (case type
+      ('catalog
+       (erase-buffer)
+       (q4/catalog json buffer board))
+      ('thread
+       (save-excursion
+         (message "Parsing new content...")
+         (goto-char (point-max))
+         (cl-loop for alist across (alist-get 'posts json) do
+           (q4/with-4chan-binds
+            (unless (member no q4/postnos)
+              (q4/render-content)
+              (q4/insert-seperator)))))
+       (q4/postprocess)
+       (when (and q4/thumbnails (display-graphic-p))
+         (q4/async-thumbnail-dispatch
+          buffer q4/thumblist))
+       (message " ")))))
 
 
 (defun q4/expand-quotes ()
@@ -1488,13 +1546,15 @@ Inserts with `q4/gray-face' and can be reversed with `q4/unexpand-quotes'"
         (setq-local q4/replyview-p t)
         (setq q4/extlink parent-link
               q4/threadno parent-thread
+              q4/content-type 'replies
               q4/board board)
+        (q4/insert-seperator t)
         (cl-loop for reply in replies do
           (let ((alist (q4/get-post-property 'apidata reply)))
             (q4/with-4chan-binds
              (q4/render-content)
              (q4/insert-seperator))))
-        (goto-char (point-min))
+        (goto-char (+ 1 (length (q4/seperator)) (point-min)))
         (q4/postprocess)
         (when q4/thumbnails
           (q4/async-thumbnail-dispatch
@@ -1564,10 +1624,12 @@ optionally center the buffer when `q4/centered' is non-nil."
     (q4-mode)
     (setq q4/extlink (format "http://boards.4chan.org/%s/catalog" board)
           q4/threadno "catalog"
+          q4/content-type 'catalog
           q4/board board)
     ;; given that common lisp looping may be a product of a sentient
     ;; lifeform within the language, these loops could probably be merged
     ;; into one cl-loop clause. However, I can't be arsed. Just Werks™.
+    (q4/insert-seperator t)
     (dotimes (page (1- q4/catalog-pages))
       (cl-loop for alist across (alist-get 'threads (aref json page)) do
         (q4/with-4chan-binds
@@ -1584,7 +1646,7 @@ optionally center the buffer when `q4/centered' is non-nil."
     (goto-char (point-min))
     (q4/postprocess))
   (switch-to-buffer buffer)
-  (goto-char (point-min))
+  (goto-char (+ 1 (length (q4/seperator)) (point-min)))
   (message " ")
   (when q4/thumbnails
     (q4/async-thumbnail-dispatch
@@ -1601,7 +1663,9 @@ thread number."
           (format "http://boards.4chan.org/%s/thread/%s"
                   board thread)
           q4/threadno thread
+          q4/content-type 'thread
           q4/board board)
+    (q4/insert-seperator t)
     (cl-loop for alist across (alist-get 'posts json) do
       (q4/with-4chan-binds
        (q4/render-content)
@@ -1611,7 +1675,7 @@ thread number."
     (goto-char (point-min))
     (q4/postprocess))
   (switch-to-buffer buffer)
-  (goto-char (point-min))
+  (goto-char (+ 1 (length (q4/seperator)) (point-min)))
   (message " ")
   (when q4/thumbnails
     (q4/async-thumbnail-dispatch
