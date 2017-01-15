@@ -852,7 +852,8 @@ CBARGS"
             (case (caddr status)
               (404 (message "Thread has 404'd")
                    (kill-buffer (current-buffer))
-                   (kill-buffer ,buffer)))
+                   (unless (bound-and-true-p q4/threadno)
+                     (kill-buffer ,buffer))))
           (apply
            ',callback
            (q4/get-response-data nil t)
