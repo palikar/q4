@@ -191,10 +191,13 @@ extracted. This is t by default, but disabling it is useful for debugging.")
 ;;;;;;;;;;;;;;; blah blah "user servicable parts" blah blah "high quality code" ;;;;;;;;;;;;;;;
 
 
-(defvar q4/base "http://a.4cdn.org/"
+(defvar q4/base-4chan "http://a.4cdn.org/"
   "Base URL for all requests.")
 
-(defvar q4/icon-base "http://s.4cdn.org/image/"
+(defvar q4/base-lainchan "http://lainchan.org/"
+  "Base URL for all requests.")
+
+(defvar q4/icon-base-4chan "http://s.4cdn.org/image/"
   "Base URL for cap and country icons.")
 
 (defvar q4/url-regexp
@@ -253,6 +256,9 @@ Also see `q4/extlink'"))
 
 (make-variable-buffer-local (defvar q4/extlink ""
   "Buffer local string containing the URL for this thread or catalog."))
+
+(make-variable-buffer-local (defvar q4/site nil
+  "Buffer local symbol containing the site this buffer is visting." ))
 
 (make-variable-buffer-local (defvar q4/board ""
   "Buffer local string containing the board this buffer is visting." ))
@@ -560,7 +566,7 @@ and jump to it, if it exists."
     (message "No quotes between point and end of post.")))
 
 
-(defun q4/complete-collection (prompt collection)
+(defun q4/complete-collection (prompt collection &optional require-match)
   "Prompts the user with the string PROMPT to select an item from
 COLLECTION. Will check for the following packages to make this as comfy as
 possible:
@@ -573,16 +579,16 @@ vanilla emacs `completing-read'"
          (cond
           ((boundp 'helm-mode)
            (require 'helm)
-           (helm-comp-read prompt collection :must-match t))
+           (helm-comp-read prompt collection :must-match require-match))
           ((boundp 'ivy-mode)
            (require 'ivy)
-           (ivy-read prompt collection :require-match t))
+           (ivy-read prompt collection :require-match require-match))
           ((boundp 'ido-mode)
            (require 'ido)
-           (ido-completing-read prompt collection nil t))
+           (ido-completing-read prompt collection nil require-match))
           (t (completing-read
               "(Use TAB to complete)> "
-              collection nil t)))))
+              collection nil require-match)))))
     choice))
 
 
@@ -717,7 +723,7 @@ image is available. In a board overview, open the current board."
                 (q4/assert-post-start)
                 (q4/prop-at-point 'board))))
          (bury-buffer)
-         (q4/query "catalog.json" 'q4/catalog board))))))
+         (q4/query q4/site "catalog.json" 'q4/catalog board))))))
 
 
 (defun q4/wget-threadpics (&optional name)
@@ -819,7 +825,7 @@ yourself :^)"
   (local-set-key (kbd "<backtab>") 'backward-button))
 
 
-(defun q4/query (dest callback board &optional buffer &rest cbargs)
+(defun q4/query (site dest callback board &optional buffer &rest cbargs)
   "Call to the mother ship and apply CALLBACK. DEST is a string
 representing the resource you're craving. BOARD is also a string,
 representing the sorry state of your....errr, the board you want to access.
@@ -829,17 +835,23 @@ this function will create a new buffer and name it according to DEST.
 CBARGS are all passed to the callback in the order provided.
 
 A call to this looks like:
-    (q4/query (format \"thread/%s.json\" no) 'q4/thread board nil no)
+    (q4/query '4chan (format \"thread/%s.json\" no) 'q4/thread board nil no)
 
 The callback function recieves the following arguments in this order;
 json - the rendered json response
+site
 buffer
 board
 CBARGS"
   (let ((url-request-extra-headers
          '(("Accept-Encoding" . "identity")
            ("Connection" . "close")))
-        (endpoint (concat q4/base board "/" dest))
+        (endpoint
+         (concat
+          (case site
+            ('4chan q4/base-4chan)
+            ('lainchan q4/base-lainchan))
+          board "/" dest))
         (url-request-method "GET")
         (buffer (or buffer
                     (generate-new-buffer
@@ -857,7 +869,7 @@ CBARGS"
           (apply
            ',callback
            (q4/get-response-data nil t)
-           ,buffer ,board ',cbargs))))))
+           ',site ,buffer ,board ',cbargs))))))
 
 
 (defmacro q4/@ (key)
@@ -1072,12 +1084,14 @@ with board/thread crosslinking and quotes."
                  ,(cond
                    ((stringp post)
                     `(q4/query
+                      q4/site
                       (format "thread/%s.json" ,thread)
                       'q4/subthread ,board nil ,thread ,post))
                    ((stringp thread)
                     `(q4/query
+                      q4/site
                       (format "thread/%s.json" ,thread) 'q4/thread ,board nil ,thread))
-                   (t `(q4/query "catalog.json" 'q4/catalog ,board))))))))))
+                   (t `(q4/query q4/site "catalog.json" 'q4/catalog ,board))))))))))
      ;; comments and code below are ripped from shr-tag-a,
      ;; thanku based stallman
      (t (shr-generic dom)
@@ -1152,7 +1166,7 @@ this function will return nil. A+ error handling."
                         (q4/get-response-data
                          (url-retrieve-synchronously
                           (concat
-                           q4/icon-base
+                           q4/icon-base-4chan
                            (if (eql type 'flag) "country/" "")
                            icon) t)))))
             ;; https://www.youtube.com/watch?v=hU7EHKFNMQg
@@ -1350,28 +1364,26 @@ after this function is first called."
 
 
 ;; adding site property for when this branches past 4chan only
-(defun q4/list-all-boards (&optional cars site)
+(defun q4/list-all-boards (site &optional cars)
   "Returns an ordered list of all boards available at SITE. Defaults to
 4chan. This has a side effect of blocking execution for a brief moment to
 initialize the index if it has not already been set for this session.
 
 When CARS is non-nil, returns only the board names with no additional
 details."
-  ;; this is temporary and is also flaming trash
+  ;; this is flaming trash
   (let ((boards
-         (case (or site '4chan)
+         (case site
            ('4chan
             (or q4/all-4chan-boards
                 (with-temp-message "Establishing board index..."
-                  (q4/map-boards
-                   (q4/append
-                    (list
-                     (q4/@ 'board)
-                     (q4/@ 'title)
-                     (q4/render-html-string
-                      (q4/@ 'meta_description) t t))
-                    q4/all-4chan-boards)))
-                q4/all-4chan-boards)))))
+                  (q4/map-boards (q4/append
+                    `(,(q4/@ 'board) ,(q4/@ 'title)
+                      ,(q4/render-html-string
+                        (q4/@ 'meta_description) t t))
+                    q4/all-4chan-boards))
+                  q4/all-4chan-boards)))
+           ('lainchan nil))))
     (if cars
         (mapcar (lambda (b) (car b)) boards)
       boards)))
@@ -1381,12 +1393,21 @@ details."
   "An interactive function which prompts for a board to start
 browsing. This is the entry point for q4."
   (interactive)
-  (let ((board (or board
-                   (q4/complete-collection
-                    "(Board)> "
-                    (q4/list-all-boards t)))))
+  (let* ((site
+          (intern
+           (q4/complete-collection
+            "(Site)> "
+            '("4chan" "lainchan"))))
+         (board
+          (or board
+              (cond
+               ((member site '(4chan))
+                (q4/complete-collection
+                 "(Board)> "
+                 (q4/list-all-boards site t)))
+               (t (read-string "(Board)> "))))))
     (if (and board (not (string= board "")))
-        (q4/query "catalog.json" 'q4/catalog board)
+        (q4/query site "catalog.json" 'q4/catalog board)
       (message "Nevermind then!"))))
 
 
@@ -1440,10 +1461,10 @@ top."
             (format "thread/%s.json" q4/threadno))
            ('catalog "catalog.json"))))
     (when dest
-      (q4/query dest 'q4/refresh-callback q4/board (current-buffer) q4/content-type))))
+      (q4/query q4/site dest 'q4/refresh-callback q4/board (current-buffer) q4/content-type))))
 
 
-(defun q4/refresh-callback (json buffer board type)
+(defun q4/refresh-callback (json site buffer board type)
   "See `q4/refresh-page': this is just the callback function it uses for
 the URL request."
   (with-current-buffer buffer
@@ -1530,6 +1551,7 @@ Inserts with `q4/gray-face' and can be reversed with `q4/unexpand-quotes'"
          (post (or post (q4/current-post)))
          (replies (q4/get-post-property 'replies post))
          (descending-p (eq (current-buffer) buffer))
+         (parent-site q4/site)
          (parent-thread q4/threadno)
          (parent-data q4/metadata)
          (parent-link q4/extlink)
@@ -1546,6 +1568,7 @@ Inserts with `q4/gray-face' and can be reversed with `q4/unexpand-quotes'"
         (setq-local q4/parent-buffer parent-buffer)
         (setq-local q4/replyview-p t)
         (setq q4/extlink parent-link
+              q4/site parent-site
               q4/threadno parent-thread
               q4/content-type 'replies
               q4/board board)
@@ -1617,7 +1640,7 @@ optionally center the buffer when `q4/centered' is non-nil."
       (replace-match "\n\n"))))
 
 
-(defun q4/catalog (json buffer board)
+(defun q4/catalog (json site buffer board)
   "Renders the catalog. Must be used as a callback for q4/query."
   ;; AFTER ALL THESE YEARS, THE ACTUAL RENDERING FUNCTION
   (message "Loading /%s/..." board)
@@ -1625,6 +1648,7 @@ optionally center the buffer when `q4/centered' is non-nil."
     (q4-mode)
     (setq q4/extlink (format "http://boards.4chan.org/%s/catalog" board)
           q4/threadno "catalog"
+          q4/site site
           q4/content-type 'catalog
           q4/board board)
     ;; given that common lisp looping may be a product of a sentient
@@ -1640,9 +1664,11 @@ optionally center the buffer when `q4/centered' is non-nil."
           'face 'q4/gray-face
           :q4type 'thread
           'action `(lambda (b)
-                     (q4/query ,(format "thread/%s.json" no)
-                               'q4/thread
-                               ,board nil ,no)))
+                     (q4/query
+                      ',q4/site
+                      ,(format "thread/%s.json" no)
+                      'q4/thread
+                      ,board nil ,no)))
          (q4/insert-seperator))))
     (goto-char (point-min))
     (q4/postprocess))
@@ -1654,7 +1680,7 @@ optionally center the buffer when `q4/centered' is non-nil."
      buffer q4/thumblist)))
 
 
-(defun q4/thread (json buffer board thread)
+(defun q4/thread (json site buffer board thread)
   "Renders threads, must be used as a callback for q4/query which has a
 thread number."
   (message "Loading /%s/%s..." board thread)
@@ -1663,6 +1689,7 @@ thread number."
     (setq q4/extlink
           (format "http://boards.4chan.org/%s/thread/%s"
                   board thread)
+          q4/site site
           q4/threadno thread
           q4/content-type 'thread
           q4/board board)
@@ -1683,7 +1710,7 @@ thread number."
      buffer q4/thumblist)))
 
 
-(defun q4/subthread (json buffer board thread post)
+(defun q4/subthread (json site buffer board thread post)
   (q4/thread json buffer board thread)
   (q4/seek-post post nil t))
 
