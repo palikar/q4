@@ -247,7 +247,7 @@ current buffer."))
   "Buffer-local symbol indicating the type of content this buffer holds.
 Used to adjust actions for things like keybinds and content refreshing."))
 
-(make-variable-buffer-local (defvar q4/threadno ""
+(make-variable-buffer-local (defvar q4/threadno nil
   "Buffer local string that is either 'catalog' or the OPs post number.
 Also see `q4/extlink'"))
 
