@@ -96,10 +96,15 @@
 ;;   MS Windows later)
 ;;
 ;; ======================== TODO ========================
+;; SMOOTH OUT REPLIES-TO-POST NAVIAGTION; ADD BACKWARD NAVIGATION, HANDLING TO CLOSE THE WINDOW, ETC
+;; SMOOTH OUT REPLIES-TO-POST NAVIAGTION; ADD BACKWARD NAVIGATION, HANDLING TO CLOSE THE WINDOW, ETC
+;; SMOOTH OUT REPLIES-TO-POST NAVIAGTION; ADD BACKWARD NAVIGATION, HANDLING TO CLOSE THE WINDOW, ETC
+;; SMOOTH OUT REPLIES-TO-POST NAVIAGTION; ADD BACKWARD NAVIGATION, HANDLING TO CLOSE THE WINDOW, ETC
+;; SMOOTH OUT REPLIES-TO-POST NAVIAGTION; ADD BACKWARD NAVIGATION, HANDLING TO CLOSE THE WINDOW, ETC
+;; SMOOTH OUT REPLIES-TO-POST NAVIAGTION; ADD BACKWARD NAVIGATION, HANDLING TO CLOSE THE WINDOW, ETC
+;; SMOOTH OUT REPLIES-TO-POST NAVIAGTION; ADD BACKWARD NAVIGATION, HANDLING TO CLOSE THE WINDOW, ETC
 ;; viper-mode support
-;; smooth out replies-to-post naviagtion; add backward navigation, handling to close the window, etc
 ;; Utilize defcustom where it makes sense.
-;; switch from the json 'now' property to the epoch timestamp
 ;; add /t/ magnet support in addition the URLs
 ;; set up photo download dir to prompt for full, not relative path when var is set to nil
 ;; add optional faces for tripcodes, names, dubs/trips/quads/etc..
@@ -919,14 +924,15 @@ This is required for in-place content refreshing."
       'q4/gray-face
       (insert
        (format
-        " %s%s@ %s\n"
+        " %s%s@ %s "
         (if (and q4/show-namefags name)
             (format "by %s " name) "")
         (if (and q4/show-tripfags trip)
             (concat trip " ") "")
-        when)))
-     ;; TODO: use the unix timestamps and make a when-like string out of it
-     ;; (local timezone support!)
+        (format-time-string "%m/%d/%y(%a)%H:%M:%S" time)))
+      (insert (if (member q4/content-type '(thread replies))
+                  (propertize "(0 replies)\n" :q4type 'replycount)
+                "\n")))
      (when q4/establish-data (q4/append no q4/postnos))
      (if img
          (progn
@@ -1506,24 +1512,24 @@ Inserts with `q4/gray-face' and can be reversed with `q4/unexpand-quotes'"
         (goto-char (next-property-change (point)))))))
 
 
-(defun q4/btfo ()
-  ;; DOCME
-  ;; Fuck it, how about WRITEME
-  (interactive)
-  (cond
-   ((bound-and-true-p q4/replyview-p)
-    (let* ((ring (with-current-buffer q4/parent-buffer
-                   (pop q4/reply-ring))))
-      (if (not ring)
-          (quit-window)
-        (q4/show-replies (car ring))
-        (goto-char (cdr ring)))))))
+;; (defun q4/btfo ()
+;;   ;; DOCME
+;;   ;; Fuck it, how about WRITEME
+;;   (interactive)
+;;   (cond
+;;    ((bound-and-true-p q4/replyview-p)
+;;     (let* ((ring (with-current-buffer q4/parent-buffer
+;;                    (pop q4/reply-ring))))
+;;       (if (not ring)
+;;           (quit-window)
+;;         (q4/show-replies (car ring))
+;;         (goto-char (cdr ring)))))))
 
 
 (defun q4/show-replies (&optional post)
   ;; DOCME
   ;; this is in a very early state, may be causing some wicked side effects,
-  ;; and is a crude hack. Polish comes later.
+  ;; and is a crude hack. Polish comes later. (still)
   (interactive)
   (let* ((buffer (get-buffer-create "*Q4 Replies*"))
          (parent-buffer (current-buffer))
@@ -1544,7 +1550,6 @@ Inserts with `q4/gray-face' and can be reversed with `q4/unexpand-quotes'"
         (q4-mode)
         (setq-local q4/metadata parent-data)
         (setq-local q4/parent-buffer parent-buffer)
-        (setq-local q4/replyview-p t)
         (setq q4/extlink parent-link
               q4/threadno parent-thread
               q4/content-type 'replies
@@ -1614,7 +1619,19 @@ optionally center the buffer when `q4/centered' is non-nil."
   ;; make whitespace consistent across all posts
   (save-excursion
     (while (re-search-forward "\n\n\n+" nil t)
-      (replace-match "\n\n"))))
+      (replace-match "\n\n")))
+  (save-excursion
+    (goto-char (point-min))
+    (let (next-count p count)
+      (while (setq next-count (q4/next-prop 'replycount))
+        (setq p (goto-char next-count)
+              count (int-to-string (length (q4/get-post-property 'replies))))
+        (re-search-forward "[0-9]+" (point-at-eol) nil 1)
+        (replace-match
+         (propertize count
+            'face 'q4/gray-face
+            :q4type 'replycount))
+        (goto-char (next-property-change (point)))))))
 
 
 (defun q4/catalog (json buffer board)
