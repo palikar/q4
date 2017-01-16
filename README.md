@@ -8,7 +8,7 @@ This is an early stage of development, the internals are in a state of chaos as 
 
 If the colors are ugly, they try to set themselves based on whether your theme is dark or light using emacs' own face system. If this fails for you, call the functions q4/set-light-colors or q4/set-dark-colors: they will force the right ones into place.
 
-This repo currently has two branches, master and the brainfuck branch. Master is kept mostly stable and usable, brainfuck is where I'm doing large amounts of changes that cause regressions across the program that need to be reworked. In that branch I am moving things to a buffer-local metadata system which allows for much more useful and reliable features, like reply threading and tree-sorted browsing (like reddit comments). As the name implies, it may be only somewhat functional at any given time. Currently master is up to date and seems to be working okay aside from the json blip I mentioned above.
+This repo currently has a few branches; master is kept mostly stable but the others are where volatile development and refactoring are happening. If you just want to use Q4, use master. The other branches exist only to ease tracking of development and might be completely broken at any given time.
 
 A few bullet points:
   * Uses the JSON api, no web scraping pleb shit.
@@ -18,20 +18,18 @@ A few bullet points:
   * `wget` integration to download thread photos
   * Comfy navigation features like quote-hopping, URL scraping, viewing replies, and inline quote expansion.
   * Board, thread, and post crosslink support.
+  * Send threads and post numbers to your native browser for easy replying
   * Integrates with Evil, Helm, and Ivy when they are available.
-
-### Changes for Monday, 01-09: (more since then, too lazy to update readme aaagggg)
-  * Crosslink support: jump to other boards, other threads, and posts inside threads
-  * TAB and BACKTAB now bound to button-forward and backward
-  * Inline quote expansion: use the curly brace keys to expand/collapse text from quoted posts.
-  * Helm, Ivy, and Ido completion for the q4/browse-board function.
-  * Internal changes not limited to new rendering for HTML <a> tags, changes to the q4/query function for more flexible callbacks, new text properties.
+  
+### Feedback and bug reports
+You can file github issues for any reason you'd like. They don't have to be bug reports, they can be suggestions, complaints, etc. I also watch the daily programming thread on /g/, if you would like to speak with me on 4chan just drop a mention there and I'll see it sooner or later.
 
 ### Default Keybinds
 If you use evil, these are mostly the same except j/k replace n/p, page refreshing is done with R instead of g, and SPC/DEL is RET/DEL, and l to recenter is not bound to anything right now. Check the source for definitive definitions. As is always the case with emacs, these can be changed.
 
     SPC         q4/point-to-next-post
     DEL         q4/point-to-previous-post
+    B           q4/board-overview
     n           q4/point-to-next-post
     p           q4/point-to-previous-post
     N           scroll-up-line
