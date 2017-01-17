@@ -1682,9 +1682,17 @@ buffer is left unmodified."
         (unless (eq major-mode 'q4-mode) (q4-mode))
         (unless nomark (push (cons post nil) q4/reply-ring))
         (setq header-line-format
-              (string-join (nreverse (mapcar
-                 (lambda (x) (concat " > "(car x)))
-                 q4/reply-ring))))
+              (let* ((list
+                      (nreverse (mapcar (lambda (x)
+                        (concat (propertize (car x) 'face 'q4/quote-face)
+                                (propertize " > " 'face 'q4/gray-face)))
+                       q4/reply-ring)))
+                     (long-p (< (length list) 4)))
+                (substring (string-join (append
+                  (list (propertize
+                         (if long-p " > " "...")
+                        'face 'q4/gray-face))
+                  (last list 4))) 0 -3)))
         (funcall set-locals)
         (erase-buffer)
         (q4/insert-seperator t)
