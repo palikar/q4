@@ -1,20 +1,132 @@
 ;; [Q4 Mode by @desvox (Blake DeMarcy)]
 ;; [   https://github.com/desvox/q4   ]
 
-;; Commentary:
-
 ;; q4.el is a fucking masterpiece. The crude hacks, lack of error handling,
 ;; verbosity of solutions, and the lack of testing outshine the Mona Lisa.
 ;; When I write code, I shove it in there, and if it bleeds, I smile and
 ;; laugh and push it in dee...errr, polish it later :^)
 
-;; Kidding aside: this is not finished software. It wont break your emacs
-;; but it may not be what you are expecting yet.
+;; Kidding aside: this is not yet finished software. It wont break your
+;; emacs but it may not be what you are expecting yet. Please read the
+;; commentary below.
 
-;; The entry point to start browsing is the interactive funtion
-;; q4/browse-board. Opening media has preference to use the third party
-;; programs feh and mpv, but soon I will implement a fallback to use the
-;; built-in image mode, which has gif support but cannot handle webms.
+;; This file is free software; you can redistribute it and/or modify it
+;; under the terms of the GNU General Public License as published by the
+;; Free Software Foundation; either version 3, or (at your option) any
+;; later version.
+
+;; This file is distributed in the hope that it will be useful, but WITHOUT
+;; ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+;; FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+;; more details.
+
+;; You should have received a copy of the GNU General Public License along
+;; with GNU Emacs; see the file COPYING. If not, write to the Free Software
+;; Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+;; 02110-1301, USA.
+
+;;;;;;;;;;;;;;;;; commentary, usage, compatibility ;;;;;;;;;;;;;;;;;;;;;;
+
+
+;; for media viewing, you should have the third party packages mpv and feh
+;; installed. Emacs has a fairly basic image viewer built into it, but I haven't
+;; bothered to integrate it with Q4 yet, as feh offers a much better experience
+;; for static images, and emacs cannot handle webms at all. They should both be
+;; available from your package manager, are free software, and aren't
+;; particularly bloated.
+
+;; If the colors are ugly, they try to set themselves based on whether your
+;; theme is dark or light using emacs' own face system. If this fails for you,
+;; please look at the functions q4/set-light-colors and q4/set-dark-colors: they
+;; will force the right ones into place.
+
+;; If you're not interested in reading all this crap, skip down to compatibility.
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; USAGE ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; The following is an introduction of how to use Q4, with default keybinds
+;; placed in [brackets]. Be mindful of the casing; an upper case letter means to
+;; hold shift, or maybe caps lock, if you're into that sort of crazy thing.
+
+;; The entry point to start browsing is the interactive funtion q4/browse-board.
+;; That'll prompt for a board and open its catalog. A listing of all boards is
+;; available through the function q4/board-overview. browse-board is not bound
+;; to any keys by default, but board-overview is available with [B] in all Q4
+;; buffers. Everything below this point assumes you're already in a Q4 buffer.
+
+;; In any context, [n/p] ([j/k] with evil) will move from one item to the next
+;; and recenter the content so an item's head is always at the top of the
+;; screen. [N/P] (or evil's [J/K]) will scroll the screen up or down by one line
+;; without jumping between posts or recentering. Use this to scroll posts whose
+;; text is overflowing the screen.
+
+;; [o] opens things. It opens boards in the board overview, opens threads in
+;; catalogs, and opens images in threads. If you want to view an image of a
+;; catalog post without opening its thread, use [i]. This also works in threads,
+;; in fact o just calls the same function when you're in a thread.
+
+;; [g] (or [R] for evil users) will refresh things. In threads, this adds new
+;; content to the end of the buffer and updates the reply info of all existing
+;; posts. This is seamless and your point position is not lost. In catalogs, the
+;; whole buffer is scrapped and point is brought back up to the top (I'll figure
+;; something more useful out later)
+
+;; [TAB] and shift+TAB [backtab] will move point from one button widget to
+;; another. This is mostly unused, as dedicated keybinds are available
+;; to action upon these buttons in all cases, however as you will see in the
+;; next line, this can be useful when there are multiple targets.
+
+;; In threads, you can use the square bracket keys to climb up a chain of
+;; replies. ] will locate the first quote (ie. >>28340238) between point and the
+;; end of the post, and jump up to it. Pressing [ will bring you back to your
+;; last jump. These jumps are tracked and you're free to climb all the way up to
+;; OP or meander around a bit, just mash [ to get back to where you started. If
+;; there are multiple quotes in a post, you can use [TAB/backtab] to move to it
+;; and then use the ] key to jump up to it. If point is already on a quote, RET
+;; will work too.
+
+;; Downward reply navigation works a bit differently (although I think I will
+;; implement this method for upward navigation as well). [r] will split the
+;; window and create a new buffer, who contains all of the replies to the parent
+;; post. You can continue moving downward by pressing [r] on these posts as
+;; well; [q] (evil users can also use [d]) will go back to the parent node. When
+;; you've reached the root, [q] will close the navigation window. Aside from the
+;; bracket jumping discussed above, all the normal features will work on posts
+;; in the reply buffer. You also get a header line here which will give you an
+;; idea of where you are. If you want out and you want it now, use [Q].
+
+;; The curly brace keys will expand quoted posts in place instead of jumping to
+;; them in the buffer. } will expand them and { will collapse them back.
+
+;; [a] and [A] offer integration with feh and mpv: [a] will feed feh all the
+;; URLs for images in the current catalog or thread. [A] will prompt for a
+;; directory and pass them to wget for archival.
+
+;; [u] will scrape up all urls in the current post and prompt you to browse one
+;; with a completion widget. This will pass it off to your native browser.
+
+;; Although Q4 cant post directly, it can easily get you there in your real web
+;; browser. [U] will prompt at the minibuffer for exactly where you want to go.
+;; [p]ost will jump to a particular comment in a thread, or open OP of a thread
+;; if you are in a catalog. [b]uffer will jump to OP of a thread, or will open
+;; the catalog itself. If the current post has an image, [i]mage will open it in
+;; your browser.
+
+;; [t] will toggle whether or not thumbnails are rendered when creating buffers.
+;; This can speed things up a bit, but thumbnailing is asynchronous, so the
+;; difference is not that major. This flips the variable q4/thumbnails on and
+;; off. If you want them permanantly disabled, just setq it to nil after Q4 is
+;; loaded.
+
+;; [q] (and evil users can also use [d]) is the universal 'back button'.
+;; Depending on context, it will navigate backward, bury, or kill buffers. [Q]
+;; (also evil [D]) will surpress any odd behaviour and just quit things
+;; unconditionally.
+
+;; [@] is a convenience bind to rename a buffer. If you rename a thread's buffer,
+;; Q4 will prompt for confirmation when using [q] (but not [Q])
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;; COMPATIBILITY ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; Sometimes, 4chan sends back gzipped responses from their API. There is
 ;; no indication of when or why this happens, and it seems to only happen
@@ -26,13 +138,9 @@
 ;; double check By typing 'gzip' in a command line and it will spit out a
 ;; message whether or not its installed.
 
-;; If these both fail, the worst case scenario is that sometimes you will
-;; have to call an action twice if it errors out.
-
-;; If the colors are ugly, they try to set themselves based on whether
-;; your theme is dark or light using emacs' own face system. If this
-;; fails for you, please look at the functions q4/set-light-colors
-;; and q4/set-dark-colors: they will force the right ones into place.
+;; If your machine is not capable of either, the worst case scenario is
+;; that sometimes you will have to call an action twice if it errors out.
+;; the relevant error message is a json-readtable-error.
 
 ;; Q4 attempts to bind keys to Evil's normal mode if it is installed. It
 ;; also attempts to utilize helm or ivy for prompts when they are
@@ -54,28 +162,14 @@
 ;; link above. Emacs 24.x and below are not supported on any platform; the
 ;; shr library included before 25 lacks functionality that Q4 expects.
 
-;; This file is free software; you can redistribute it and/or modify it
-;; under the terms of the GNU General Public License as published by the
-;; Free Software Foundation; either version 3, or (at your option) any
-;; later version.
-
-;; This file is distributed in the hope that it will be useful, but WITHOUT
-;; ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
-;; FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
-;; more details.
-
-;; You should have received a copy of the GNU General Public License along
-;; with GNU Emacs; see the file COPYING. If not, write to the Free Software
-;; Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
-;; 02110-1301, USA.
+;; As of this time, emacs snapshots for version 26 have not been tested.
 
 ;; ====================== PROGRESS ======================
 ;; DONE:
-;;   Zero third party dependencies, works on the standard elisp library
+;;   Zero third party emacs dependencies, works on the standard elisp library
 ;;   Evil (when installed) and vanilla emacs keybinds out of the box.
 ;;   Fairly robust property-based navigation. (refactoring and optimization still ongoing)
 ;;   Full thumbnail support, works async in stages to keep browsing snappy
-;;   Reply threading support (interface needs work and better keybinds)
 ;;   Color highlighting for greentext, quotes, IDs, headers and seperators.
 ;;   Detects quotes that reference to deleted posts, applies a
 ;;     different face with no navigation callbacks.
@@ -85,24 +179,20 @@
 ;;   External media support via feh and mpv
 ;;   Download full thread/catalog content with wget with interactive directory prompt
 ;;   Tracked navigation up a reply tree with a buffer local marker stack
+;;   Tracked navigation down a reply tree in a dedicated buffer/window
 ;;   Inline quote expansion to read quotes without changing position
-;;   Generate permalinks to open threads externally.
+;;   Generate permalinks to open threads, posts and images externally and pass
+;;     them to the native default browser
 ;;   Scrape up all URLs from a post or buffer, using helm, ivy, ido, or vanilla
 ;;     completeing-read to pop one open in an external browser. Super comfy.
 ;;   Cleans up all of its http request buffers.
 ;;   In-place thread refreshing, appending new posts at the end of the buffer.
 ;;     Catalogs need something better than the current "throw it all out" method.
-;;   Gzip response support (this may cause a *nix dependency, will investigate for
-;;   MS Windows later)
+;;   Gzip API response support (requires either compiled-in zlib support or gzip installed)
 ;;
 ;; ======================== TODO ========================
-;; SMOOTH OUT REPLIES-TO-POST NAVIAGTION; ADD BACKWARD NAVIGATION, HANDLING TO CLOSE THE WINDOW, ETC
-;; SMOOTH OUT REPLIES-TO-POST NAVIAGTION; ADD BACKWARD NAVIGATION, HANDLING TO CLOSE THE WINDOW, ETC
-;; SMOOTH OUT REPLIES-TO-POST NAVIAGTION; ADD BACKWARD NAVIGATION, HANDLING TO CLOSE THE WINDOW, ETC
-;; SMOOTH OUT REPLIES-TO-POST NAVIAGTION; ADD BACKWARD NAVIGATION, HANDLING TO CLOSE THE WINDOW, ETC
-;; SMOOTH OUT REPLIES-TO-POST NAVIAGTION; ADD BACKWARD NAVIGATION, HANDLING TO CLOSE THE WINDOW, ETC
-;; SMOOTH OUT REPLIES-TO-POST NAVIAGTION; ADD BACKWARD NAVIGATION, HANDLING TO CLOSE THE WINDOW, ETC
-;; SMOOTH OUT REPLIES-TO-POST NAVIAGTION; ADD BACKWARD NAVIGATION, HANDLING TO CLOSE THE WINDOW, ETC
+;; lainchan/8chan support
+;; extract urls from parenthesis if needed when using list-urls
 ;; viper-mode support
 ;; Utilize defcustom where it makes sense.
 ;; add /t/ magnet support in addition the URLs
@@ -113,7 +203,6 @@
 ;; get /pol/ flags centered in the row instead of at the bottom (looks weird af)
 ;; /pol/ ID support
 ;; tree based browsing
-;; 8chan support, maybe a few others, when more progress is made for 4chan.
 ;; ======================================================
 
 (require 'derived)
@@ -123,7 +212,11 @@
 (require 'cl)
 
 (when (< emacs-major-version 25)
-  (warn "Q4 WILL NOT WORK ON EMACS 24"))
+  (warn "Q4 will not work on emacs 24! See here for info
+on how to upgrade outside of your package manager:
+https://www.emacswiki.org/emacs/EmacsSnapshotAndDebian
+
+Compiling emacs is also not so hard; check out the GNU website."))
 
 (defvar q4/wrapwidth 80
   "The width, in characters, of post seperators and when post texts will be
@@ -527,6 +620,12 @@ they were posted. This also works in the catalogs."
   (interactive) (q4/point-to-post 'prev))
 
 
+(defun q4/point-to-first-post ()
+  "Moves point to the first post head, below the first seperator."
+  (interactive)
+  (goto-char (+ 1 (length (q4/seperator)) (point-min))))
+
+
 (defun q4/seek-next-button (&optional goto)
   "Returns buffer position if the next button from POINT. if GOTO is
 non-nil, moves point to the button."
@@ -769,14 +868,15 @@ yourself :^)"
     "j" 'q4/point-to-next-post
     "k" 'q4/point-to-previous-post
     "H" 'evil-backward-char
-    "J" 'evil-next-line
-    "K" 'evil-previous-line
+    "J" 'scroll-up-line
+    "K" 'scroll-down-line
     "L" 'evil-forward-char
     "u" 'q4/list-urls
     "U" 'q4/view-content-externally
-    "q" 'kill-this-buffer
-    "Q" 'evil-record-macro
-    "d" 'kill-this-buffer
+    "q" 'q4/go-back
+    "Q" (lambda () (interactive) (quit-window t))
+    "d" 'q4/go-back
+    "D" (lambda () (interactive) (quit-window t))
     "]" 'q4/quote-hop-backward
     "[" 'q4/pop-mark
     "a" 'q4/pass-to-feh
@@ -788,6 +888,7 @@ yourself :^)"
     "r" 'q4/show-replies
     "R" 'q4/refresh-page
     "B" 'q4/board-overview
+    "gg" 'q4/point-to-first-post
     "}" 'q4/expand-quotes
     "{" 'q4/unexpand-quotes))
 
@@ -804,7 +905,8 @@ yourself :^)"
   (local-set-key (kbd "P") 'scroll-down-line)
   (local-set-key (kbd "r") 'q4/show-replies)
   (local-set-key (kbd "l") 'q4/recenter)
-  (local-set-key (kbd "q") 'kill-this-buffer)
+  (local-set-key (kbd "q") 'q4/go-back)
+  (local-set-key (kbd "Q") (lambda () (interactive) (quit-window t)))
   (local-set-key (kbd "]") 'q4/quote-hop-backward)
   (local-set-key (kbd "[") 'q4/pop-mark)
   (local-set-key (kbd "{") 'q4/unexpand-quotes)
@@ -818,6 +920,7 @@ yourself :^)"
   (local-set-key (kbd "U") 'q4/view-content-externally)
   (local-set-key (kbd "g") 'q4/refresh-page)
   (local-set-key (kbd "B") 'q4/board-overview)
+  (local-set-key (kbd "M-<") 'q4/point-to-first-post)
   (local-set-key (kbd "<f5>") 'q4/refresh-page)
   (local-set-key (kbd "@") 'rename-buffer)
   (local-set-key (kbd "<tab>") 'forward-button)
@@ -943,11 +1046,12 @@ This is required for in-place content refreshing."
             'face 'q4/gray-face
             'action `(lambda (b) (q4/load-image ,img)))
            (insert "\n")
-           (q4/append thumb q4/thumblist)
+           (q4/append (cons no thumb) q4/thumblist)
            (if (and (display-graphic-p) q4/thumbnails)
                (insert
                 (propertize
-                 (format "Loading thumbnail... (%s)\n" thumb)
+                 "%\n\n"
+                 'face 'q4/gray-face
                  :q4type 'pending-thumb
                  :thumb thumb))
              (insert "\n")))
@@ -967,6 +1071,7 @@ This is required for in-place content refreshing."
            (link    . ,link)
            (name    . ,name)
            (file    . ,file)
+           (imgdata . ,nil)
            (image   . ,img)
            (id      . ,id)
            (replies . ,nil)))
@@ -1066,7 +1171,7 @@ with board/thread crosslinking and quotes."
             :q4type 'crosslink
             'action
             `(lambda (button)
-               (when (yes-or-no-p
+               (when (y-or-n-p
                       ,(concat
                         "Open "
                         (cond
@@ -1250,13 +1355,13 @@ surrounded in brackets with a trailing space."
            (if file
                (concat
                 "http://i.4cdn.org/"
-                board "/" (int-to-string (q4/@ 'tim)) ext)))
+                q4/board "/" (int-to-string (q4/@ 'tim)) ext)))
 
           (thumb
            (if file
                (concat
                 "http://i.4cdn.org/"
-                board "/" (int-to-string (q4/@ 'tim)) "s.jpg")))
+                q4/board "/" (int-to-string (q4/@ 'tim)) "s.jpg")))
 
           (comment
            (let ((comment (q4/@ 'com))
@@ -1321,38 +1426,51 @@ object instead."
 
 (defun q4/async-thumbnail-dispatch (buffer thumbs)
   "Semi-asynchonously starts the retrieval of a buffer's thumbnails after
-rendering. Loads 10, waits a bit, and re-runs itself in a few seconds.
+rendering. Loads 8, waits a bit, and re-runs itself in a few seconds.
 Rinse, repeat until list is done. User interaction begins very quickly
 after this function is first called."
-  ;; this looks like a staircase lmao
-  (let ((url-request-extra-headers
-         '(("Connection" . "close")))
-        (count 0) addr)
-    (while (and (buffer-live-p buffer)
-                thumbs (< count 10))
-      (setq addr (pop thumbs)
-            count (1+ count))
-      (url-retrieve
-       addr
-       `(lambda (status)
-          (goto-char (point-min))
-          (let ((data (q4/get-response-data)))
-            (when (buffer-live-p ,buffer)
-              (with-current-buffer ,buffer
-                (save-excursion
-                  (goto-char (point-min))
-                  (while (search-forward ,(format "Loading thumbnail... (%s)" addr) nil t)
-                    (when (equal ,addr (get-char-property (match-beginning 0) :thumb))
-                      (delete-region (progn (back-to-indentation) (point)) (point-at-eol))
-                      (if data (progn (insert-image (create-image data nil t))
-                                      (insert "\n"))
-                        (delete-backward-char 1)))))))))
-       nil t))
-    (if (and thumbs (buffer-live-p buffer))
-        (run-at-time
-         2 nil 'q4/async-thumbnail-dispatch
-         buffer thumbs)
-      (setq q4/thumblist nil))))
+  (when q4/thumbnails
+    (let ((url-request-extra-headers
+           '(("Connection" . "close")))
+          (count 0) addr no data)
+      (while (and (buffer-live-p buffer) thumbs (< count 8))
+        (incf count)
+        (let ((item (pop thumbs)))
+          (setq no (car item) addr (cdr item)))
+        ;; first check if the image already has been retrieved and stored in the
+        ;; metadata list...
+        (if (setq data (q4/get-post-property 'imgdata no buffer))
+            (save-excursion
+              (goto-char (point-min))
+              (q4/seek-post no nil t t)
+              (goto-char (q4/next-prop 'pending-thumb nil (q4/sep-pos)))
+              (delete-region (progn (back-to-indentation) (point)) (point-at-eol))
+              (insert-image data)))
+        ;; if not, set a retrieval job for it, which will switch back into the
+        ;; buffer, insert the thumbnail to its post, and store the image in the
+        ;; metadata list.
+        (url-retrieve
+         addr
+         `(lambda (status)
+            (goto-char (point-min))
+            (let (found (data (q4/get-response-data)))
+              (when (buffer-live-p ,buffer)
+                (with-current-buffer ,buffer
+                  (save-excursion
+                    (goto-char (point-min))
+                    (while (and (not found) (search-forward "%" nil t))
+                      (when (equal ,addr (get-char-property (match-beginning 0) :thumb))
+                        (setq found t)
+                        (delete-region (progn (back-to-indentation) (point)) (point-at-eol))
+                        (if (not data) (insert " ")
+                          (insert-image (setq data (create-image data nil t)))
+                          (setcdr (assq 'imgdata (assq (string-to-int ,no) q4/metadata)) data)))))))))
+         nil t))
+      (if (and thumbs (buffer-live-p buffer))
+          (run-at-time
+           2 nil 'q4/async-thumbnail-dispatch
+           buffer thumbs)
+        (setq q4/thumblist nil)))))
 
 
 ;; adding site property for when this branches past 4chan only
@@ -1426,7 +1544,7 @@ to o by default, to open a board in a new buffer."
           (insert (match-string 1 (caddr board)))
           (fill-region p (point)))
         (q4/insert-seperator))
-      (goto-char (+ 1 (length (q4/seperator)) (point-min))))
+      (q4/point-to-first-post))
     (switch-to-buffer buffer)))
 
 
@@ -1497,8 +1615,7 @@ Inserts with `q4/gray-face' and can be reversed with `q4/unexpand-quotes'"
             (concat "\n" text "\n")
             :q4type 'expanded
             'face 'q4/gray-face))
-          (setq next (q4/next-prop 'quoted nil (q4/sep-pos)))))))
-  (q4/recenter))
+          (setq next (q4/next-prop 'quoted nil (q4/sep-pos))))))))
 
 
 (defun q4/unexpand-quotes ()
@@ -1512,61 +1629,74 @@ Inserts with `q4/gray-face' and can be reversed with `q4/unexpand-quotes'"
         (goto-char (next-property-change (point)))))))
 
 
-;; (defun q4/btfo ()
-;;   ;; DOCME
-;;   ;; Fuck it, how about WRITEME
-;;   (interactive)
-;;   (cond
-;;    ((bound-and-true-p q4/replyview-p)
-;;     (let* ((ring (with-current-buffer q4/parent-buffer
-;;                    (pop q4/reply-ring))))
-;;       (if (not ring)
-;;           (quit-window)
-;;         (q4/show-replies (car ring))
-;;         (goto-char (cdr ring)))))))
-
-
-(defun q4/show-replies (&optional post)
-  ;; DOCME
-  ;; this is in a very early state, may be causing some wicked side effects,
-  ;; and is a crude hack. Polish comes later. (still)
+(defun q4/go-back ()
+  "Depending on the context, this function will navigate backward, or kill
+buffers and windows."
   (interactive)
-  (let* ((buffer (get-buffer-create "*Q4 Replies*"))
-         (parent-buffer (current-buffer))
-         (post (or post (q4/current-post)))
+  (case q4/content-type
+    ((catalog boardview)
+     (kill-buffer (current-buffer)))
+    (thread
+     (if (string-match-p q4/threadno (buffer-name))
+         (kill-buffer (current-buffer))
+       (when (y-or-n-p "Kill this buffer? ")
+         (kill-buffer (current-buffer)))))
+    (replies
+     (when (equal id (caar q4/reply-ring))
+       (pop q4/reply-ring))
+     (let ((last (car q4/reply-ring)))
+       (if (not last)
+           (quit-window t)
+         (q4/show-replies (car last) t)
+         (goto-char (cdr last))
+         (q4/recenter))))))
+
+
+(defun q4/show-replies (&optional post nomark)
+  "Pop a new window to navigate through replies with. The original thread
+buffer is left unmodified."
+  (interactive)
+  (when (and (eq q4/content-type 'replies)
+             (consp (car q4/reply-ring))
+             (not nomark))
+    (setcdr (car q4/reply-ring) (point)))
+  (let* ((post (or post (q4/current-post)))
          (replies (q4/get-post-property 'replies post))
-         (descending-p (eq (current-buffer) buffer))
-         (parent-thread q4/threadno)
-         (parent-data q4/metadata)
-         (parent-link q4/extlink)
+         (reply-buffer (get-buffer-create "*Q4 Replies*"))
          (q4/establish-data nil)
-         (board q4/board))
+         ;; the reply buffer needs to inherit the parent's data,
+         ;; so create a function with the parent data and call it
+         ;; in the child body
+         (set-locals
+          `(lambda ()
+             (setq-local parent ,(current-buffer))
+             (setq-local id ,post)
+             (setq q4/metadata     ',q4/metadata
+                   q4/content-type 'replies
+                   q4/extlink      ,q4/extlink
+                   q4/board        ,q4/board
+                   q4/threadno     ,q4/threadno))))
     (if (not replies)
         (message "No replies to this post.")
-      (when descending-p
-        (push (cons post (point)) q4/reply-ring))
-      (with-current-buffer buffer
+      (with-current-buffer reply-buffer
+        (unless (eq major-mode 'q4-mode) (q4-mode))
+        (unless nomark (push (cons post nil) q4/reply-ring))
+        (setq header-line-format
+              (string-join (nreverse (mapcar
+                 (lambda (x) (concat " > "(car x)))
+                 q4/reply-ring))))
+        (funcall set-locals)
         (erase-buffer)
-        (q4-mode)
-        (setq-local q4/metadata parent-data)
-        (setq-local q4/parent-buffer parent-buffer)
-        (setq q4/extlink parent-link
-              q4/threadno parent-thread
-              q4/content-type 'replies
-              q4/board board)
         (q4/insert-seperator t)
-        (cl-loop for reply in replies do
-          (let ((alist (q4/get-post-property 'apidata reply)))
-            (q4/with-4chan-binds
-             (q4/render-content)
-             (q4/insert-seperator))))
-        (goto-char (+ 1 (length (q4/seperator)) (point-min)))
+        (cl-loop for reply in replies
+          for alist = (q4/get-post-property 'apidata reply) do
+          (q4/with-4chan-binds
+           (q4/render-content)
+           (q4/insert-seperator)))
+        (q4/point-to-first-post)
         (q4/postprocess)
-        (when q4/thumbnails
-          (q4/async-thumbnail-dispatch
-           buffer q4/thumblist)))
-      (funcall (if descending-p 'switch-to-buffer 'pop-to-buffer)
-               buffer))))
+        (q4/async-thumbnail-dispatch reply-buffer q4/thumblist))
+      (pop-to-buffer reply-buffer))))
 
 
 (defun q4/load-image (addr)
@@ -1610,7 +1740,7 @@ optionally center the buffer when `q4/centered' is non-nil."
          'action `(lambda (b)
                     (q4/seek-post
                      ,(get-char-property (match-beginning 0) :no) t))))))
-  ;; center the buffer, if enabled
+  ;; "center" the buffer, if enabled
   (save-excursion
     (when q4/centered
       (insert q4/spacer)
@@ -1620,6 +1750,7 @@ optionally center the buffer when `q4/centered' is non-nil."
   (save-excursion
     (while (re-search-forward "\n\n\n+" nil t)
       (replace-match "\n\n")))
+  ;; update all of the reply counters
   (save-excursion
     (goto-char (point-min))
     (let (next-count p count)
@@ -1627,10 +1758,7 @@ optionally center the buffer when `q4/centered' is non-nil."
         (setq p (goto-char next-count)
               count (int-to-string (length (q4/get-post-property 'replies))))
         (re-search-forward "[0-9]+" (point-at-eol) nil 1)
-        (replace-match
-         (propertize count
-            'face 'q4/gray-face
-            :q4type 'replycount))
+        (replace-match (propertize count 'face 'q4/gray-face :q4type 'replycount))
         (goto-char (next-property-change (point)))))))
 
 
@@ -1664,11 +1792,9 @@ optionally center the buffer when `q4/centered' is non-nil."
     (goto-char (point-min))
     (q4/postprocess))
   (switch-to-buffer buffer)
-  (goto-char (+ 1 (length (q4/seperator)) (point-min)))
+  (q4/point-to-first-post)
   (message " ")
-  (when q4/thumbnails
-    (q4/async-thumbnail-dispatch
-     buffer q4/thumblist)))
+  (q4/async-thumbnail-dispatch buffer q4/thumblist))
 
 
 (defun q4/thread (json buffer board thread)
@@ -1693,11 +1819,9 @@ thread number."
     (goto-char (point-min))
     (q4/postprocess))
   (switch-to-buffer buffer)
-  (goto-char (+ 1 (length (q4/seperator)) (point-min)))
+  (q4/point-to-first-post)
   (message " ")
-  (when q4/thumbnails
-    (q4/async-thumbnail-dispatch
-     buffer q4/thumblist)))
+  (q4/async-thumbnail-dispatch buffer q4/thumblist))
 
 
 (defun q4/subthread (json buffer board thread post)
