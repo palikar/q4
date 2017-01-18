@@ -252,6 +252,10 @@ and 'flag/abbrev. Pretend, in this example, that % is a flag icon :^)
 'flag/name: % Great Britain
 'flag/abbrev: % GB")
 
+(defvar q4/expand-images-with-quotes t
+  "When non nil, `q4/expand-quotes' will also insert thumbnails if the
+parent post has one.")
+
 (defvar q4/catalog-pages 6
   "number of pages to load from the catalog. Max is 10.")
 
@@ -327,7 +331,6 @@ if needed."))
 thread in the order they were posted."))
 
 (make-variable-buffer-local (defvar q4/reply-ring '()
-  ;; UNIMPLEMENTED
   "Buffer-local list which stores post IDs and point positions while browsing
 through replies."))
 
@@ -354,6 +357,10 @@ Also see `q4/extlink'"))
 
 (make-variable-buffer-local (defvar q4/board ""
   "Buffer local string containing the board this buffer is visting." ))
+
+(make-variable-buffer-local (defvar q4/op-image nil
+  "Buffer-local variable that caches the imagedata of OPs thumbnail
+when moving from the catalog into a thread."))
 
 
 (defvar q4/icon-path (expand-file-name "q4-icons" user-emacs-directory)
@@ -1013,20 +1020,16 @@ Not only does this function insert and propertize incoming content, it
 also keeps the buffer's variables up to speed on what the buffer contains.
 This is required for in-place content refreshing."
   '(progn
-     (q4/with-new-face
-      'q4/id-face
+     (q4/with-new-face 'q4/id-face
       (insert
-       (propertize
-        q4/header-indicator
-        :q4type 'head
-        :no no))
+       (propertize q4/header-indicator
+        :q4type 'head :no no))
       (insert no)
-      (when title (insert (concat " | " title))))
+      (when title
+        (insert (concat " | " title))))
      (q4/handle-country)
-     (q4/with-new-face
-      'q4/gray-face
-      (insert
-       (format
+     (q4/with-new-face 'q4/gray-face
+      (insert (format
         " %s%s@ %s "
         (if (and q4/show-namefags name)
             (format "by %s " name) "")
@@ -1036,33 +1039,34 @@ This is required for in-place content refreshing."
       (insert (if (member q4/content-type '(thread replies))
                   (propertize "(0 replies)\n" :q4type 'replycount)
                 "\n")))
-     (when q4/establish-data (q4/append no q4/postnos))
-     (if img
-         (progn
-           (when q4/establish-data (q4/append img q4/threadpics))
-           (insert-button
-            (concat file ext)
-            :q4type 'image
-            'face 'q4/gray-face
-            'action `(lambda (b) (q4/load-image ,img)))
-           (insert "\n")
-           (q4/append (cons no thumb) q4/thumblist)
-           (if (and (display-graphic-p) q4/thumbnails)
-               (insert
-                (propertize
-                 "%\n\n"
-                 'face 'q4/gray-face
-                 :q4type 'pending-thumb
-                 :thumb thumb))
-             (insert "\n")))
-       (insert "\n"))
-     (when comment (insert comment))
+     (when q4/establish-data
+       (q4/append no q4/postnos))
+     (if (not img) (insert "\n")
+       (when q4/establish-data
+         (q4/append img q4/threadpics))
+       (insert-button (concat file ext)
+        :q4type 'image 'face 'q4/gray-face
+        'action `(lambda (b) (q4/load-image ,img)))
+       (insert "\n")
+       (q4/append (cons no thumb) q4/thumblist)
+       (if (and (display-graphic-p) q4/thumbnails)
+           (insert (propertize "%\n\n"
+             'face 'q4/gray-face
+             :q4type 'pending-thumb
+             :thumb thumb))
+         (insert "\n")))
+     (when comment
+       (insert comment))
      (insert "\n\n")
      (when q4/establish-data
-       (push
-        (cons
+       (push (cons
          (string-to-int no)
-         `((comment . ,comment)
+         ;; if this is the OP, we can re-use the thumbnail loaded from a catalog.
+         ;; this is an optional parameter for q4/thread and if it isn't bound,
+         ;; this wont do anything.
+         `((imgdata .
+            ,(and (equal q4/threadno no) q4/op-image))
+           (comment . ,comment)
            (apidata . ,alist)
            (title   . ,title)
            (thumb   . ,thumb)
@@ -1071,8 +1075,8 @@ This is required for in-place content refreshing."
            (link    . ,link)
            (name    . ,name)
            (file    . ,file)
-           (imgdata . ,nil)
            (image   . ,img)
+           (ext     . ,ext)
            (id      . ,id)
            (replies . ,nil)))
         ;; It looks odd but ,nil is not a typo. Without doing that, all
@@ -1602,19 +1606,21 @@ Inserts with `q4/gray-face' and can be reversed with `q4/unexpand-quotes'"
     (q4/assert-post-start)
     (unless (q4/next-prop 'expanded nil (q4/sep-pos))
       (let ((next (q4/next-prop 'quoted nil (q4/sep-pos)))
-             no text)
+             no text imgdata)
         (while next
           (setq text (get-char-property next :quoting)
-                no (get-char-property next :no))
+                no (get-char-property next :no)
+                imgdata (q4/get-post-property 'imgdata no))
           (goto-char next)
           (unless (q4/boip)
             (insert (propertize "\n" :q4type 'expanded)))
           (goto-char (next-property-change (point)))
-          (insert
-           (propertize
-            (concat "\n" text "\n")
-            :q4type 'expanded
-            'face 'q4/gray-face))
+          (q4/with-new-props '(face q4/gray-face :q4type expanded)
+           (when (and q4/expand-images-with-quotes imgdata)
+             (insert "\n")
+             (insert-image imgdata)
+             (insert "\n\n"))
+           (insert (concat "\n" text "\n")))
           (setq next (q4/next-prop 'quoted nil (q4/sep-pos))))))))
 
 
@@ -1710,7 +1716,7 @@ buffer is left unmodified."
 (defun q4/load-image (addr)
   "The callback attached to image buttons, which opens the image in feh or
 mpv depending on the file type."
-  (let ((gif-p (member (substring addr -4) (list ".gif" "webm" ".mp4"))))
+  (let ((gif-p (member (substring addr -4) '(".gif" "webm" ".mp4"))))
     (message "Loading %s..." (if gif-p "video" "image"))
     (if gif-p
         (start-process-shell-command
@@ -1795,7 +1801,9 @@ optionally center the buffer when `q4/centered' is non-nil."
           'action `(lambda (b)
                      (q4/query ,(format "thread/%s.json" no)
                                'q4/thread
-                               ,board nil ,no)))
+                               ,board nil
+                               ,no
+                               (q4/get-post-property 'imgdata ,no))))
          (q4/insert-seperator))))
     (goto-char (point-min))
     (q4/postprocess))
@@ -1805,7 +1813,7 @@ optionally center the buffer when `q4/centered' is non-nil."
   (q4/async-thumbnail-dispatch buffer q4/thumblist))
 
 
-(defun q4/thread (json buffer board thread)
+(defun q4/thread (json buffer board thread &optional op-image)
   "Renders threads, must be used as a callback for q4/query which has a
 thread number."
   (message "Loading /%s/%s..." board thread)
@@ -1814,6 +1822,7 @@ thread number."
     (setq q4/extlink
           (format "https://boards.4chan.org/%s/thread/%s"
                   board thread)
+          q4/op-image op-image
           q4/threadno thread
           q4/content-type 'thread
           q4/board board)
@@ -1822,8 +1831,6 @@ thread number."
       (q4/with-4chan-binds
        (q4/render-content)
        (q4/insert-seperator)))
-    (goto-char (point-min))
-    ;; (q4/bind-quotes)
     (goto-char (point-min))
     (q4/postprocess))
   (switch-to-buffer buffer)
