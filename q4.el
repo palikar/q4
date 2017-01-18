@@ -289,7 +289,7 @@ extracted. This is t by default, but disabling it is useful for debugging.")
 ;;;;;;;;;;;;;;; blah blah "user servicable parts" blah blah "high quality code" ;;;;;;;;;;;;;;;
 
 
-(defvar q4/base "http://a.4cdn.org/"
+(defvar q4/base "https://a.4cdn.org/"
   "Base URL for all requests.")
 
 (defvar q4/icon-base "http://s.4cdn.org/image/"
@@ -1213,7 +1213,7 @@ to the caller."
                     'boards
                     (q4/get-response-data
                      (url-retrieve-synchronously
-                      "http://a.4cdn.org/boards.json" t) t))))
+                      "https://a.4cdn.org/boards.json" t) t))))
      (cl-loop for alist across response do ,@body)))
 
 
@@ -1342,9 +1342,9 @@ surrounded in brackets with a trailing space."
 
           (link
            (if (eq q4/content-type 'catalog)
-               (format "http://boards.4chan.org/%s/thread/%s"
+               (format "https://boards.4chan.org/%s/thread/%s"
                        q4/board no)
-             (format "http://boards.4chan.org/%s/thread/%s#p%s"
+             (format "https://boards.4chan.org/%s/thread/%s#p%s"
                      q4/board q4/threadno no)))
 
           (file
@@ -1354,7 +1354,7 @@ surrounded in brackets with a trailing space."
           (img
            (if file
                (concat
-                "http://i.4cdn.org/"
+                "https://i.4cdn.org/"
                 q4/board "/" (int-to-string (q4/@ 'tim)) ext)))
 
           (thumb
@@ -1692,7 +1692,7 @@ buffer is left unmodified."
                   (list (propertize
                          (if long-p " > " "...")
                         'face 'q4/gray-face))
-                  (last list 4))) 0 -3)))
+                  (last list 3))) 0 -3)))
         (funcall set-locals)
         (erase-buffer)
         (q4/insert-seperator t)
@@ -1776,7 +1776,7 @@ optionally center the buffer when `q4/centered' is non-nil."
   (message "Loading /%s/..." board)
   (with-current-buffer buffer
     (q4-mode)
-    (setq q4/extlink (format "http://boards.4chan.org/%s/catalog" board)
+    (setq q4/extlink (format "https://boards.4chan.org/%s/catalog" board)
           q4/threadno "catalog"
           q4/content-type 'catalog
           q4/board board)
@@ -1812,7 +1812,7 @@ thread number."
   (with-current-buffer buffer
     (q4-mode)
     (setq q4/extlink
-          (format "http://boards.4chan.org/%s/thread/%s"
+          (format "https://boards.4chan.org/%s/thread/%s"
                   board thread)
           q4/threadno thread
           q4/content-type 'thread
