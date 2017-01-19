@@ -1118,8 +1118,8 @@ with board/thread crosslinking and quotes."
               (with-current-buffer q4/parent-buffer
                 ;; assign the parent post a reply attribute for this quote
                 (unless (member current-post (q4/get-post-property 'replies quoted-num))
-                  (setcdr (last (assq 'replies (assq (string-to-int quoted-num) q4/metadata)))
-                        (cons current-post nil)))))
+                  (let ((parent-post (last (assq 'replies (assq (string-to-int quoted-num) q4/metadata)))))
+                    (when (consp parent-post) (setcdr parent-post (cons current-post nil)))))))
             (insert
              (propertize
               (concat
