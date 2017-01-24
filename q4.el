@@ -1433,7 +1433,7 @@ object instead."
 rendering. Loads 8, waits a bit, and re-runs itself in a few seconds.
 Rinse, repeat until list is done. User interaction begins very quickly
 after this function is first called."
-  (when q4/thumbnails
+  (when (and (display-graphic-p) q4/thumbnails)
     (let ((url-request-extra-headers
            '(("Connection" . "close")))
           (count 0) addr no data)
@@ -1474,7 +1474,8 @@ after this function is first called."
           (run-at-time
            2 nil 'q4/async-thumbnail-dispatch
            buffer thumbs)
-        (setq q4/thumblist nil)))))
+        (with-current-buffer buffer
+          (setq q4/thumblist nil))))))
 
 
 ;; adding site property for when this branches past 4chan only
@@ -1693,12 +1694,12 @@ buffer is left unmodified."
                         (concat (propertize (car x) 'face 'q4/quote-face)
                                 (propertize " > " 'face 'q4/gray-face)))
                        q4/reply-ring)))
-                     (long-p (< (length list) 4)))
+                     (long-p (< (length list) 6)))
                 (substring (string-join (append
                   (list (propertize
                          (if long-p " > " "...")
                         'face 'q4/gray-face))
-                  (last list 3))) 0 -3)))
+                  (last list 5))) 0 -3)))
         (funcall set-locals)
         (erase-buffer)
         (q4/insert-seperator t)
