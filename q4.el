@@ -118,6 +118,12 @@
 ;; off. If you want them permanantly disabled, just setq it to nil after Q4 is
 ;; loaded.
 
+;; [T] will toggle the rendering method used for thumbnailing. One will load
+;; thumbnails only when they are near point (q4/repeating-thumbnail-dispatch)
+;; and the latter will try to load all of them in the background
+;; (q4/async-thumbnail-dispatch)
+
+
 ;; [q] (and evil users can also use [d]) is the universal 'back button'.
 ;; Depending on context, it will navigate backward, bury, or kill buffers. [Q]
 ;; (also evil [D]) will surpress any odd behaviour and just quit things
@@ -199,7 +205,6 @@
 ;; set up photo download dir to prompt for full, not relative path when var is set to nil
 ;; add optional faces for tripcodes, names, dubs/trips/quads/etc..
 ;; MS Windows support for external media
-;; more intelligent thumbnail rendering based on buffer position.
 ;; get /pol/ flags centered in the row instead of at the bottom (looks weird af)
 ;; /pol/ ID support
 ;; tree based browsing
@@ -217,6 +222,13 @@ on how to upgrade outside of your package manager:
 https://www.emacswiki.org/emacs/EmacsSnapshotAndDebian
 
 Compiling emacs is also not so hard; check out the GNU website."))
+
+(defvar q4/thumbnail-method #'q4/repeating-thumbnail-dispatch
+  "Defines the callback function for thumbnail rendering. This can
+either be `q4/repeating-thumbnail-dispatch' or `q4/async-thumbnail-dispatch'.
+The async dispatcher is often smoother but has shown rather unpredictable
+behaviour. The repeating dispatch needs more testing but it seems more
+reliable.")
 
 (defvar q4/wrapwidth 80
   "The width, in characters, of post seperators and when post texts will be
@@ -870,6 +882,18 @@ yourself :^)"
    (setq q4/thumbnails (not q4/thumbnails))))
 
 
+(defun q4/toggle-thumbnailing-method ()
+  "Switches between the async and repeating dispatcher. Only affects
+newly loaded buffer after switching."
+  (interactive)
+  (message "Switched to %s."
+   (setq q4/thumbnail-method
+         (if (eq q4/thumbnail-method
+                 #'q4/repeating-thumbnail-dispatch)
+             #'q4/async-thumbnail-dispatch
+           #'q4/repeating-thumbnail-dispatch))))
+
+
 (when (bound-and-true-p evil-mode)
   (evil-define-key 'normal q4-mode-map
     "j" 'q4/point-to-next-post
@@ -889,6 +913,7 @@ yourself :^)"
     "a" 'q4/pass-to-feh
     "A" 'q4/wget-threadpics
     "t" 'q4/toggle-thumbnails
+    "T" 'q4/toggle-thumbnailing-method
     "i" 'q4/open-post-image
     "o" 'q4/open-item
     "@" 'rename-buffer
@@ -919,6 +944,7 @@ yourself :^)"
   (local-set-key (kbd "{") 'q4/unexpand-quotes)
   (local-set-key (kbd "}") 'q4/expand-quotes)
   (local-set-key (kbd "t") 'q4/toggle-thumbnails)
+  (local-set-key (kbd "T") 'q4/toggle-thumbnailing-method)
   (local-set-key (kbd "a") 'q4/pass-to-feh)
   (local-set-key (kbd "A") 'q4/wget-threadpics)
   (local-set-key (kbd "i") 'q4/open-post-image)
@@ -1624,7 +1650,11 @@ the URL request."
               (q4/insert-seperator)))))
        (q4/postprocess)
        (when (and q4/thumbnails (display-graphic-p))
-         (q4/repeating-thumbnail-dispatch buffer))
+         (apply q4/thumbnail-method
+                `(,buffer
+                  ,@(when (eq q4/thumbnail-method
+                              #'q4/async-thumbnail-dispatch)
+                      (list q4/thumblist)))))
        (message " ")))))
 
 
@@ -1742,7 +1772,12 @@ buffer is left unmodified."
            (q4/insert-seperator)))
         (q4/point-to-first-post)
         (q4/postprocess)
-        (q4/repeating-thumbnail-dispatch reply-buffer))
+        (when (and q4/thumbnails (display-graphic-p))
+          (apply q4/thumbnail-method
+                 `(,reply-buffer
+                   ,@(when (eq q4/thumbnail-method
+                               #'q4/async-thumbnail-dispatch)
+                       (list q4/thumblist))))))
       (pop-to-buffer reply-buffer))))
 
 
@@ -1843,7 +1878,12 @@ optionally center the buffer when `q4/centered' is non-nil."
   (switch-to-buffer buffer)
   (q4/point-to-first-post)
   (message " ")
-  (q4/repeating-thumbnail-dispatch buffer))
+  (when (and q4/thumbnails (display-graphic-p))
+    (apply q4/thumbnail-method
+           `(,buffer
+             ,@(when (eq q4/thumbnail-method
+                         #'q4/async-thumbnail-dispatch)
+                 (list q4/thumblist))))))
 
 
 (defun q4/thread (json buffer board thread &optional op-image)
@@ -1869,7 +1909,12 @@ thread number."
   (switch-to-buffer buffer)
   (q4/point-to-first-post)
   (message " ")
-  (q4/repeating-thumbnail-dispatch buffer))
+  (when (and q4/thumbnails (display-graphic-p))
+    (apply q4/thumbnail-method
+           `(,buffer
+             ,@(when (eq q4/thumbnail-method
+                         #'q4/async-thumbnail-dispatch)
+                 (list q4/thumblist))))))
 
 
 (defun q4/subthread (json buffer board thread post)
