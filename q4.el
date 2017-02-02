@@ -1428,6 +1428,39 @@ object instead."
       data)))
 
 
+(defun q4/repeating-thumbnail-dispatch (buffer)
+  "Scans forward 2250 chars every 1 second for thumbnails waiting
+to be rendered. Retrieves them synchonously and inserts the data,
+unless the imagedata has been set already (in the case of thread
+OPs and reply chains)
+
+This is less smooth than `q4/async-thumbnail-dispatch' but this
+method is much more reliable. The latter function would occasionally
+snag up for like 5 seconds at a time if connection latency was low
+enough."
+  (when (and (buffer-live-p (get-buffer buffer))
+             (display-graphic-p)
+             q4/thumbnails)
+    (with-current-buffer buffer
+      (save-excursion
+        (let (pos image (range (+ 2250 (point))))
+          (while (setq pos (q4/next-prop 'pending-thumb nil range))
+            (goto-char pos)
+            (setq image (or (q4/get-post-property 'imgdata
+                             (q4/current-post) buffer)
+                            (create-image
+                             (q4/get-response-data
+                              (url-retrieve-synchronously
+                               (q4/prop-at-point :thumb) t))
+                             nil t)))
+            (delete-forward-char 1)
+            (insert-image image)
+            (setcdr (assq 'imgdata (assq (q4/current-post t) q4/metadata)) image)))))
+    (run-at-time 1 nil #'q4/repeating-thumbnail-dispatch buffer)))
+
+
+;; this function is absolutely disgusting, and has been replaced by the one
+;; above, but im keeping it here because why the hell not
 (defun q4/async-thumbnail-dispatch (buffer thumbs)
   "Semi-asynchonously starts the retrieval of a buffer's thumbnails after
 rendering. Loads 8, waits a bit, and re-runs itself in a few seconds.
@@ -1591,8 +1624,7 @@ the URL request."
               (q4/insert-seperator)))))
        (q4/postprocess)
        (when (and q4/thumbnails (display-graphic-p))
-         (q4/async-thumbnail-dispatch
-          buffer q4/thumblist))
+         (q4/repeating-thumbnail-dispatch buffer))
        (message " ")))))
 
 
@@ -1710,7 +1742,7 @@ buffer is left unmodified."
            (q4/insert-seperator)))
         (q4/point-to-first-post)
         (q4/postprocess)
-        (q4/async-thumbnail-dispatch reply-buffer q4/thumblist))
+        (q4/repeating-thumbnail-dispatch reply-buffer))
       (pop-to-buffer reply-buffer))))
 
 
@@ -1811,7 +1843,7 @@ optionally center the buffer when `q4/centered' is non-nil."
   (switch-to-buffer buffer)
   (q4/point-to-first-post)
   (message " ")
-  (q4/async-thumbnail-dispatch buffer q4/thumblist))
+  (q4/repeating-thumbnail-dispatch buffer))
 
 
 (defun q4/thread (json buffer board thread &optional op-image)
@@ -1837,7 +1869,7 @@ thread number."
   (switch-to-buffer buffer)
   (q4/point-to-first-post)
   (message " ")
-  (q4/async-thumbnail-dispatch buffer q4/thumblist))
+  (q4/repeating-thumbnail-dispatch buffer))
 
 
 (defun q4/subthread (json buffer board thread post)
