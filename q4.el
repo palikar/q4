@@ -10,6 +10,9 @@
 ;; emacs but it may not be what you are expecting yet. Please read the
 ;; commentary below.
 
+;; You can get this running in your emacs by downloading/copying q4.el
+;; and doing M-x eval-buffer.
+
 ;; This file is free software; you can redistribute it and/or modify it
 ;; under the terms of the GNU General Public License as published by the
 ;; Free Software Foundation; either version 3, or (at your option) any
