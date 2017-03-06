@@ -291,12 +291,6 @@ build doesn't have image support.")
 info. Must be at least one character, and navigation will be more reliable
 if it is fairly unique (though text properties are also checked).")
 
-(defvar q4/spacer "               ")
-(defvar q4/centered nil
-  "When this is non nil, q4/spacer is inserted at the beginning of each
-line. This isn't dynamic atm, you will have to set this to your screen
-width manually")
-
 (defvar q4/seperator-char "-"
   "A 1-length string to draw seperators with.")
 
@@ -327,7 +321,11 @@ their names as keys.")
   "A list of all available boards for 4chan. This variable is initilized
 on the first call to `q4/browse-board'.")
 
-;; blah blah (eq '() nil) blah blah type clarity
+(defvar q4/icon-path (expand-file-name "q4-icons" user-emacs-directory)
+  "Path where cap and flag icons are stored in. This can
+be safely changed, the contents will be redownloaded.")
+
+;; these are all buffer local. would it be better to use a class? maybe. fuck it.
 (make-variable-buffer-local (defvar q4/establish-data t
   "When this is non nil, `q4/render-content' and all of it's worker
 functions will do side effects to buffer variables, like pushing new data
@@ -378,9 +376,9 @@ Also see `q4/extlink'"))
 when moving from the catalog into a thread."))
 
 
-(defvar q4/icon-path (expand-file-name "q4-icons" user-emacs-directory)
-  "Path where cap and flag icons are stored in. This can
-be safely changed, the contents will be redownloaded.")
+(make-variable-buffer-local (defvar q4/expansion-offset 0
+  "An integer representing the number of characters used by quote expansions.
+This allows asynchronous thumbnailing to jump to a char position reliably."))
 
 
 (defface q4/greentext-face
@@ -1286,11 +1284,9 @@ this function will return nil. A+ error handling."
   (let* ((icon (concat (downcase name) ".gif"))
          (path (expand-file-name icon q4/icon-path)))
     (unless (file-exists-p q4/icon-path) (make-directory q4/icon-path))
-    (or (gethash icon q4/icon-cache) ;; https://www.youtube.com/watch?v=hU7EHKFNMQg
+    (or (gethash icon q4/icon-cache)
         (if (file-exists-p path)
-            ;; https://www.youtube.com/watch?v=hU7EHKFNMQg
-            (puthash icon (create-image path) q4/icon-cache) ;; https://www.youtube.com/watch?v=hU7EHKFNMQg
-          ;; https://www.youtube.com/watch?v=hU7EHKFNMQg
+            (puthash icon (create-image path) q4/icon-cache)
           (message "Indexing new icon: %s (%s)" name path)
           (let ((data (ignore-errors
                         (q4/get-response-data
@@ -1299,13 +1295,11 @@ this function will return nil. A+ error handling."
                            q4/icon-base
                            (if (eql type 'flag) "country/" "")
                            icon) t)))))
-            ;; https://www.youtube.com/watch?v=hU7EHKFNMQg
             (let ((rendered (ignore-errors (create-image data nil t))))
               (if (not rendered)
                   (puthash icon nil q4/icon-cache)
-                (with-temp-file path (insert data)) ;; https://www.youtube.com/watch?v=hU7EHKFNMQg
+                (with-temp-file path (insert data))
                 (puthash icon rendered q4/icon-cache))))))))
-              ;; https://www.youtube.com/watch?v=hU7EHKFNMQg
 
 
 (defun q4/insert-icon (icon &optional type)
@@ -1315,7 +1309,8 @@ surrounded in brackets with a trailing space."
   ;; This needs real error handling...
   (let ((image (q4/get-icon icon type)))
     (if (not image)
-        (insert (format "[%s] " icon))
+        (insert (format " [%s] " icon))
+      (insert " ")
       (insert-image image "%")
       (insert " "))))
 
@@ -1328,16 +1323,16 @@ surrounded in brackets with a trailing space."
       'q4/country-name-face
       (case q4/country-type
         ('abbrev
-         (insert (format "%s " country)))
+         (insert (format  " [%s] " country)))
         ('name
-         (insert (format "%s " (q4/@ 'country_name))))
+         (insert (format " [%s] " (q4/@ 'country_name))))
         ('flag (q4/insert-icon country 'flag))
         ('flag/name
          (q4/insert-icon country 'flag)
-         (insert (format "%s " (q4/@ 'country_name))))
+         (insert (format "[%s] " (q4/@ 'country_name))))
         ('flag/abbrev
          (q4/insert-icon country 'flag)
-         (insert (format "%s " country)))))))
+         (insert (format "[%s] " country)))))))
 
 
 (defmacro q4/with-4chan-binds (&rest body)
@@ -1470,22 +1465,23 @@ enough."
   (when (and (buffer-live-p (get-buffer buffer))
              (display-graphic-p)
              q4/thumbnails)
-    (with-current-buffer buffer
-      (save-excursion
-        (let (pos image (range (+ 2250 (point))))
-          (while (setq pos (q4/next-prop 'pending-thumb nil range))
-            (goto-char pos)
-            (setq image (or (q4/get-post-property 'imgdata
-                             (q4/current-post) buffer)
-                            (create-image
-                             (q4/get-response-data
-                              (url-retrieve-synchronously
-                               (q4/prop-at-point :thumb) t))
-                             nil t)))
-            (delete-forward-char 1)
-            (insert-image image)
-            (setcdr (assq 'imgdata (assq (q4/current-post t) q4/metadata)) image)))))
-    (run-at-time 1 nil #'q4/repeating-thumbnail-dispatch buffer)))
+    (unwind-protect
+      (with-current-buffer buffer
+        (save-excursion
+          (let (pos image (range (+ 2250 (point))))
+            (while (setq pos (q4/next-prop 'pending-thumb nil range))
+              (goto-char pos)
+              (setq image
+                    (or (q4/get-post-property 'imgdata (q4/current-post) buffer)
+                        (create-image
+                         (q4/get-response-data
+                          (url-retrieve-synchronously
+                           (q4/prop-at-point :thumb) t))
+                         nil t)))
+              (delete-forward-char 1)
+              (insert-image image)
+              (setcdr (assq 'imgdata (assq (q4/current-post t) q4/metadata)) image)))))
+      (run-at-time 1 nil #'q4/repeating-thumbnail-dispatch buffer))))
 
 
 ;; this function is absolutely disgusting, and has been replaced by the one
@@ -1518,19 +1514,18 @@ after this function is first called."
         (url-retrieve
          addr
          `(lambda (status)
-            (goto-char (point-min))
-            (let (found (data (q4/get-response-data)))
-              (when (buffer-live-p ,buffer)
+            (when (buffer-live-p ,buffer)
+              (let (pos (data (q4/get-response-data)))
                 (with-current-buffer ,buffer
                   (save-excursion
                     (goto-char (point-min))
-                    (while (and (not found) (search-forward "%" nil t))
-                      (when (equal ,addr (get-char-property (match-beginning 0) :thumb))
-                        (setq found t)
-                        (delete-region (progn (back-to-indentation) (point)) (point-at-eol))
-                        (if (not data) (insert " ")
-                          (insert-image (setq data (create-image data nil t)))
-                          (setcdr (assq 'imgdata (assq (string-to-int ,no) q4/metadata)) data)))))))))
+                    (q4/seek-post ,no nil t t)
+                    (when (setq pos (q4/next-prop 'pending-thumb nil (q4/sep-pos)))
+                      (goto-char pos)
+                      (delete-region (point-at-bol) (point-at-eol))
+                      (if (not data) (insert " ")
+                        (insert-image (setq data (create-image data nil t)))
+                        (setcdr (assq 'imgdata (assq (string-to-int ,no) q4/metadata)) data))))))))
          nil t))
       (if (and thumbs (buffer-live-p buffer))
           (run-at-time
@@ -1548,7 +1543,7 @@ initialize the index if it has not already been set for this session.
 
 When CARS is non-nil, returns only the board names with no additional
 details."
-  ;; this is temporary and is also flaming trash
+  ;; this is less temporary than id like to admit and is also flaming trash
   (let ((boards
          (case (or site '4chan)
            ('4chan
@@ -1679,14 +1674,17 @@ Inserts with `q4/gray-face' and can be reversed with `q4/unexpand-quotes'"
                 imgdata (q4/get-post-property 'imgdata no))
           (goto-char next)
           (unless (q4/boip)
-            (insert (propertize "\n" :q4type 'expanded)))
+            (insert (propertize "\n" :q4type 'expanded))
+            (incf q4/expansion-offset 1))
           (goto-char (next-property-change (point)))
           (q4/with-new-props '(face q4/gray-face :q4type expanded)
            (when (and q4/expand-images-with-quotes imgdata)
              (insert "\n")
-             (insert-image imgdata)
-             (insert "\n\n"))
-           (insert (concat "\n" text "\n")))
+             (insert-image imgdata " ")
+             (insert "\n\n")
+             (incf q4/expansion-offset 4))
+           (insert (concat "\n" text "\n"))
+           (incf q4/expansion-offset (+ (length text) 2)))
           (setq next (q4/next-prop 'quoted nil (q4/sep-pos))))))))
 
 
@@ -1697,7 +1695,10 @@ Inserts with `q4/gray-face' and can be reversed with `q4/unexpand-quotes'"
     (q4/assert-post-start)
     (while (q4/inboundp (point) (q4/sep-pos))
       (if (eq 'expanded (get-char-property (point) :q4type))
-          (delete-region (point) (next-property-change (point)))
+          (let ((start (point))
+                (end (next-property-change (point))))
+            (delete-region start end)
+            (incf q4/expansion-offset (- start end)))
         (goto-char (next-property-change (point)))))))
 
 
@@ -1792,8 +1793,8 @@ mpv depending on the file type."
     (if gif-p
         (start-process-shell-command
          "mpv" nil (format "wget -O /tmp/4gif %s;
-                          emacsclient -e '(message \" \")';
-                          mpv --loop=inf /tmp/4gif" addr))
+                            emacsclient -e '(message \" \")';
+                            mpv --loop=inf /tmp/4gif" addr))
       (start-process-shell-command
        "feh" nil (format "wget -O - %s | feh -FZ -" addr)))))
 
@@ -1805,8 +1806,7 @@ to the buffer after the initial rendering phase. It's necessary to jump to
 refreshing.
 
 Currently implemented functions are assigning callbacks to board
-crosslinks, to make sure no newline padding exceeds two lines, and to
-optionally center the buffer when `q4/centered' is non-nil."
+crosslinks, and to make sure no newline padding exceeds two lines."
   ;; crosslink and quote buttons must be added in postprocessing because
   ;; buttons can not persist across propertized substrings, or some
   ;; bullshit like that. TLDR this shit don't work in `q4/render-content'
@@ -1825,12 +1825,6 @@ optionally center the buffer when `q4/centered' is non-nil."
          'action `(lambda (b)
                     (q4/seek-post
                      ,(get-char-property (match-beginning 0) :no) t))))))
-  ;; "center" the buffer, if enabled
-  (save-excursion
-    (when q4/centered
-      (insert q4/spacer)
-      (while (search-forward "\n" nil t)
-        (replace-match (concat "\n" q4/spacer)))))
   ;; make whitespace consistent across all posts
   (save-excursion
     (while (re-search-forward "\n\n\n+" nil t)
