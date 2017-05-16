@@ -1,14 +1,7 @@
 ;; [Q4 Mode by @desvox (Blake DeMarcy)]
 ;; [   https://github.com/desvox/q4   ]
 
-;; q4.el is a fucking masterpiece. The crude hacks, lack of error handling,
-;; verbosity of solutions, and the lack of testing outshine the Mona Lisa.
-;; When I write code, I shove it in there, and if it bleeds, I smile and
-;; laugh and push it in dee...errr, polish it later :^)
-
-;; Kidding aside: this is not yet finished software. It wont break your
-;; emacs but it may not be what you are expecting yet. Please read the
-;; commentary below.
+;; last changes around March of 2017. Please read the commentary below.
 
 ;; You can get this running in your emacs by downloading/copying q4.el
 ;; and doing M-x eval-buffer.
@@ -199,7 +192,7 @@
 ;;     Catalogs need something better than the current "throw it all out" method.
 ;;   Gzip API response support (requires either compiled-in zlib support or gzip installed)
 ;;
-;; ======================== TODO ========================
+;; ======================== TODO (deprecated? maybe not...) ========================
 ;; lainchan/8chan support
 ;; extract urls from parenthesis if needed when using list-urls
 ;; viper-mode support
@@ -211,7 +204,7 @@
 ;; get /pol/ flags centered in the row instead of at the bottom (looks weird af)
 ;; /pol/ ID support
 ;; tree based browsing
-;; ======================================================
+;; =================================================================================
 
 (require 'derived)
 (require 'json)
