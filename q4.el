@@ -531,7 +531,7 @@ effects."
     (let ((no (save-excursion
                 (q4/assert-post-start)
                 (get-char-property (point) :no))))
-      (if int (string-to-int no) no))))
+      (if int (string-to-number no) no))))
 
 
 (defun q4/get-post-property (prop &optional post buffer)
@@ -543,7 +543,7 @@ is buffer-local.
 Returns either the cdr of PROP (which can be a nil value) or nil if it
 isn't in the list."
   (when (stringp (setq post (or post (q4/current-post t))))
-    (setq post (string-to-int post)))
+    (setq post (string-to-number post)))
   (with-current-buffer (or buffer (current-buffer))
     (alist-get prop (assq post q4/metadata))))
 
@@ -1080,7 +1080,7 @@ This is required for in-place content refreshing."
      (insert "\n\n")
      (when q4/establish-data
        (push (cons
-         (string-to-int no)
+         (string-to-number no)
          ;; if this is the OP, we can re-use the thumbnail loaded from a catalog.
          ;; this is an optional parameter for q4/thread and if it isn't bound,
          ;; this wont do anything.
@@ -1138,7 +1138,7 @@ with board/thread crosslinking and quotes."
               (with-current-buffer q4/parent-buffer
                 ;; assign the parent post a reply attribute for this quote
                 (unless (member current-post (q4/get-post-property 'replies quoted-num))
-                  (let ((parent-post (last (assq 'replies (assq (string-to-int quoted-num) q4/metadata)))))
+                  (let ((parent-post (last (assq 'replies (assq (string-to-number quoted-num) q4/metadata)))))
                     (when (consp parent-post) (setcdr parent-post (cons current-post nil)))))))
             (insert
              (propertize
@@ -1518,7 +1518,7 @@ after this function is first called."
                       (delete-region (point-at-bol) (point-at-eol))
                       (if (not data) (insert " ")
                         (insert-image (setq data (create-image data nil t)))
-                        (setcdr (assq 'imgdata (assq (string-to-int ,no) q4/metadata)) data))))))))
+                        (setcdr (assq 'imgdata (assq (string-to-number ,no) q4/metadata)) data))))))))
          nil t))
       (if (and thumbs (buffer-live-p buffer))
           (run-at-time
