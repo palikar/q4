@@ -1,10 +1,12 @@
 # Browse 4chan completely in ~~parenthesis~~ Emacs Lisp.
 
-[![LOOK I CAN USE GIMP](https://raw.githubusercontent.com/desvox/q4/brainfuck/qbanner.png)](#banner)
-
 **REQUIRES EMACS 25**
 
-I am no longer developing this package. It's a fully functional browser but lacks a few features I initially planned because I decided not to waste any more time browsing chans then neccesary :^)
+~~I am no longer developing this package. It's a fully functional browser but lacks a few features I initially planned because I decided not to waste any more time browsing chans then neccesary :^)~~
+In this fork I plan on implementing features that I think are important for any 4chan client.
+This is mainly actually being able to post on 4chan, and not just being a read only pleb.
+To accomplish this I'll probably use the xwidget features.
+After that, added features from 4chanx will be natural conclusion.
 
 A few bullet points:
   * Uses the JSON api, no web scraping pleb shit.
@@ -16,6 +18,10 @@ A few bullet points:
   * Board, thread, and post crosslink support.
   * Send threads and post numbers to your native browser for easy replying
   * Integrates with Evil, Helm, and Ivy when they are available.
+
+TODO:
+Being able to reply
+etc
 
 
 ### Feedback and bug reports
