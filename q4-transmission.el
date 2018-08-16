@@ -1,3 +1,4 @@
+;; most of the hard part of transmission is setting up the server settingsg
 (defvar q4/transmission-username nil
   "user name required to use transmission-remote")
 

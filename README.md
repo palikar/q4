@@ -22,9 +22,8 @@ A few bullet points:
   * Integrates with Evil, Helm, and Ivy when they are available.
 
 TODO:
-Being able to reply
-etc
 
+[todo file](./project-todo.org)
 
 ### Feedback and bug reports
 You can file github issues for any reason you'd like. They don't have to be bug reports, they can be suggestions, complaints, etc. New feature requests are very welcome. I want to never have to touch firefox again to browse the 'chans.
