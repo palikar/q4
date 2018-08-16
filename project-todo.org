@@ -1,1 +1,32 @@
 * Project Todo
+** TODO Add per data transformations in thread
+   same idea as the board and thread, but now for each post in the thread
+** TODO Add better inline replies with overlays
+** TODO make the buffers read only
+   marks and such get messed up if you accidentally type something while browsing
+** TODO add thread watching
+*** TODO add notifications for changes
+    think 4chanx
+** TODO more sophisticated search and filtering
+   basically regexes
+** TODO add posting
+   fuck me no documentation
+   I fucking hate REST
+*** xwidget support
+    going to have to use this for the google recaptcha 
+** TODO add support for similar *chan boards
+   think lainchan, 8chan, etc
+   any tinychan ones will be minimal effort, but 8chan has a different api
+** TODO mouse support
+   click thumbnails to open full sized versions
+   hover over for full sized image? is that possible??
+** any old ones that haven't been implemented yet
+*** TODO extract urls from parenthesis if needed when using list-urls
+*** TODO viper-mode support
+*** TODO Utilize defcustom where it makes sense.
+*** TODO add /t/ magnet support in addition the URLs
+     [[https://github.com/skangas/mentor/issues][mentor]] might be dead?, but it's also possible to just call transmission from shell commands
+*** TODO set up photo download dir to prompt for full, not relative path when var is set to nil
+*** TODO add optional faces for tripcodes, names, dubs/trips/quads/etc..
+*** TODO get /pol/ flags centered in the row instead of at the bottom (looks weird af)
+*** TODO /pol/ ID support

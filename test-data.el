@@ -1,10 +1,12 @@
 (defvar boards nil)
+
 (cl-defstruct q4/board-struct
   "structure for a vichan board
 NAME : string
 THREADS : list"
   name
   threads)
+
 (cl-defstruct q4/thread-struct
   "structure for a vichan thread
 NO : integer
@@ -42,22 +44,13 @@ PAGE : integer
   images
   last-modified
   page)
-;; (defmacro q4/when* (comp &body body )
-;;   "executes BODY if all comp are met"
-;;   (if (null comp)
-;;       'body
-;;     `(when ,(car comp)
-;;        (q4/when* ,(rest comp) body))))
 
-;; (q4/when* ((= 2 2)
-;; 	   (= 3 3))
-;; 	  (print "nice"))
 
 
 (defmacro alist-get-prop (property)
   `(alist-get ,property alist))
 
-(defun set-thread-properties (alist page-num)
+(defun q4/set-thread-properties (alist page-num)
   "sets the properties of the thread struct THREAD-STRUCT
 based of alist ALIST
 and int PAGE-NUM"
@@ -88,7 +81,7 @@ q4/thread-struct for the thread"
       (cl-loop for alist across (alist-get 'threads (aref json page))
 	       do (progn
 		    (setq current-thread 
-			  (set-thread-properties alist page))
+			  (q4/set-thread-properties alist page))
 		    ;; (insert (format "\n %S \n" alist))
 		    (setf (q4/board-struct-threads current-board)
 			  (cons current-thread (q4/board-struct-threads current-board))))))
