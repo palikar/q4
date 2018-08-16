@@ -20,13 +20,24 @@
 ** TODO mouse support
    click thumbnails to open full sized versions
    hover over for full sized image? is that possible??
-** any old ones that haven't been implemented yet
-*** TODO extract urls from parenthesis if needed when using list-urls
-*** TODO viper-mode support
-*** TODO Utilize defcustom where it makes sense.
-*** TODO add /t/ magnet support in addition the URLs
-     [[https://github.com/skangas/mentor/issues][mentor]] might be dead?, but it's also possible to just call transmission from shell commands
-*** TODO set up photo download dir to prompt for full, not relative path when var is set to nil
-*** TODO add optional faces for tripcodes, names, dubs/trips/quads/etc..
-*** TODO get /pol/ flags centered in the row instead of at the bottom (looks weird af)
-*** TODO /pol/ ID support
+   either way, there should be an option to either expand inline (up to a point based off file dimensions)
+   or create a new buffer with the file
+** TODO extract urls from parenthesis if needed when using list-urls
+** TODO viper-mode support
+** TODO Utilize defcustom where it makes sense.
+** TODO add /t/ magnet support in addition the URLs
+    [[https://github.com/skangas/mentor/issues][mentor]] might be dead?, but it's also possible to just call transmission from shell commands
+    transmission-cli is a good choice
+*** DONE transmission
+    CLOSED: [2018-08-16 Thu 06:20]
+    transmission-daemon's option '-c' allows automatic adding for .torrent files in a certain
+    directory, so just download the torrent files into that directory
+    [[file:q4-transmission.el%20][transmission]]
+*** TODO function that allows easy access to links 
+    searches post for magnet links/.torrent files, enumerates them, and lets the user chose interactivly
+    which ones to add
+** TODO set up photo download dir to prompt for full, not relative path when var is set to nil
+** TODO add optional faces for tripcodes, names, dubs/trips/quads/etc..
+** TODO get /pol/ flags centered in the row instead of at the bottom (looks weird af)
+** TODO /pol/ ID support
+    

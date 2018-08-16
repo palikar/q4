@@ -3,6 +3,8 @@
 **REQUIRES EMACS 25**
 
 ~~I am no longer developing this package. It's a fully functional browser but lacks a few features I initially planned because I decided not to waste any more time browsing chans then neccesary :^)~~
+
+
 In this fork I plan on implementing features that I think are important for any 4chan client.
 This is mainly actually being able to post on 4chan, and not just being a read only pleb.
 To accomplish this I'll probably use the xwidget features.
@@ -25,7 +27,7 @@ etc
 
 
 ### Feedback and bug reports
-You can file github issues for any reason you'd like. They don't have to be bug reports, they can be suggestions, complaints, etc. I am not adding new features myself anymore but if I see an issue for it pop up, i will probably be willing to work on it.
+You can file github issues for any reason you'd like. They don't have to be bug reports, they can be suggestions, complaints, etc. New feature requests are very welcome. I want to never have to touch firefox again to browse the 'chans.
 
 ### Default Keybinds
 If you use evil, these are mostly the same except j/k replace n/p, page refreshing is done with R instead of g, and SPC/DEL is RET/DEL, and l to recenter is not bound to anything right now. Check the source for definitive definitions. As is always the case with emacs, these can be changed.
