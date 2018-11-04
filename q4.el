@@ -1459,7 +1459,8 @@ enough."
              (display-graphic-p)
              q4/thumbnails)
     (unwind-protect
-      (with-current-buffer buffer
+        (with-current-buffer buffer
+          (setq buffer-read-only nil)
         (save-excursion
           (let (pos image (range (+ 2250 (point))))
             (while (setq pos (q4/next-prop 'pending-thumb nil range))
@@ -1473,7 +1474,8 @@ enough."
                          nil t)))
               (delete-forward-char 1)
               (insert-image image)
-              (setcdr (assq 'imgdata (assq (q4/current-post t) q4/metadata)) image)))))
+              (setcdr (assq 'imgdata (assq (q4/current-post t) q4/metadata)) image))))
+        (setq buffer-read-only t))
       (run-at-time 1 nil #'q4/repeating-thumbnail-dispatch buffer))))
 
 
@@ -1489,6 +1491,7 @@ after this function is first called."
            '(("Connection" . "close")))
           (count 0) addr no data)
       (while (and (buffer-live-p buffer) thumbs (< count 8))
+        (setq buffer-read-only nil)
         (incf count)
         (let ((item (pop thumbs)))
           (setq no (car item) addr (cdr item)))
@@ -1509,6 +1512,7 @@ after this function is first called."
          `(lambda (status)
             (when (buffer-live-p ,buffer)
               (let (pos (data (q4/get-response-data)))
+                (setq buffer-read-only nil)
                 (with-current-buffer ,buffer
                   (save-excursion
                     (goto-char (point-min))
@@ -1519,7 +1523,8 @@ after this function is first called."
                       (if (not data) (insert " ")
                         (insert-image (setq data (create-image data nil t)))
                         (setcdr (assq 'imgdata (assq (string-to-number ,no) q4/metadata)) data))))))))
-         nil t))
+         nil t)
+	(setq buffer-read-only t))
       (if (and thumbs (buffer-live-p buffer))
           (run-at-time
            2 nil 'q4/async-thumbnail-dispatch
@@ -1576,6 +1581,7 @@ to o by default, to open a board in a new buffer."
   (let ((buffer (get-buffer-create "*Q4 Boards*"))
         (info (q4/list-all-boards nil (or site '4chan))))
     (with-current-buffer buffer
+      (setq buffer-read-only nil)
       (erase-buffer)
       (q4-mode)
       (setq q4/content-type 'boardview)
@@ -1599,7 +1605,8 @@ to o by default, to open a board in a new buffer."
           (insert (match-string 1 (caddr board)))
           (fill-region p (point)))
         (q4/insert-seperator))
-      (q4/point-to-first-post))
+      (q4/point-to-first-post)
+      (setq buffer-read-only t))
     (switch-to-buffer buffer)))
 
 
@@ -1656,6 +1663,7 @@ text, use `q4/quote-hop-backward' to navigate to it normally.
 
 Inserts with `q4/gray-face' and can be reversed with `q4/unexpand-quotes'"
   (interactive)
+  (setq buffer-read-only nil)
   (save-excursion
     (q4/assert-post-start)
     (unless (q4/next-prop 'expanded nil (q4/sep-pos))
@@ -1678,12 +1686,14 @@ Inserts with `q4/gray-face' and can be reversed with `q4/unexpand-quotes'"
              (incf q4/expansion-offset 4))
            (insert (concat "\n" text "\n"))
            (incf q4/expansion-offset (+ (length text) 2)))
-          (setq next (q4/next-prop 'quoted nil (q4/sep-pos))))))))
+          (setq next (q4/next-prop 'quoted nil (q4/sep-pos)))))))
+          (setq buffer-read-only t))
 
 
 (defun q4/unexpand-quotes ()
   "Collapses quotes created by `q4/expand-quotes'"
   (interactive)
+  (setq buffer-read-only nil)
   (save-excursion
     (q4/assert-post-start)
     (while (q4/inboundp (point) (q4/sep-pos))
@@ -1692,7 +1702,8 @@ Inserts with `q4/gray-face' and can be reversed with `q4/unexpand-quotes'"
                 (end (next-property-change (point))))
             (delete-region start end)
             (incf q4/expansion-offset (- start end)))
-        (goto-char (next-property-change (point)))))))
+        (goto-char (next-property-change (point))))))
+  (setq buffer-read-only t))
 
 
 (defun q4/go-back ()
@@ -1745,6 +1756,7 @@ buffer is left unmodified."
     (if (not replies)
         (message "No replies to this post.")
       (with-current-buffer reply-buffer
+        (setq buffer-read-only nil)
         (unless (eq major-mode 'q4-mode) (q4-mode))
         (unless nomark (push (cons post nil) q4/reply-ring))
         (setq header-line-format
@@ -1774,7 +1786,8 @@ buffer is left unmodified."
                  `(,reply-buffer
                    ,@(when (eq q4/thumbnail-method
                                #'q4/async-thumbnail-dispatch)
-                       (list q4/thumblist))))))
+                       (list q4/thumblist)))))
+        (setq buffer-read-only t))
       (pop-to-buffer reply-buffer))))
 
 
@@ -1833,12 +1846,13 @@ crosslinks, and to make sure no newline padding exceeds two lines."
         (replace-match (propertize count 'face 'q4/gray-face :q4type 'replycount))
         (goto-char (next-property-change (point)))))))
 
-
+(goto-char 62151)
 (defun q4/catalog (json buffer board)
   "Renders the catalog. Must be used as a callback for q4/query."
   ;; AFTER ALL THESE YEARS, THE ACTUAL RENDERING FUNCTION
   (message "Loading /%s/..." board)
   (with-current-buffer buffer
+    (setq buffer-read-only nil)
     (q4-mode)
     (setq q4/extlink (format "https://boards.4chan.org/%s/catalog" board)
           q4/threadno "catalog"
@@ -1864,7 +1878,8 @@ crosslinks, and to make sure no newline padding exceeds two lines."
                                (q4/get-post-property 'imgdata ,no))))
          (q4/insert-seperator))))
     (goto-char (point-min))
-    (q4/postprocess))
+    (q4/postprocess)
+    (setq buffer-read-only t))
   (switch-to-buffer buffer)
   (q4/point-to-first-post)
   (message " ")
@@ -1881,6 +1896,7 @@ crosslinks, and to make sure no newline padding exceeds two lines."
 thread number."
   (message "Loading /%s/%s..." board thread)
   (with-current-buffer buffer
+    (setq buffer-read-only nil)
     (q4-mode)
     (setq q4/extlink
           (format "https://boards.4chan.org/%s/thread/%s"
@@ -1895,7 +1911,8 @@ thread number."
        (q4/render-content)
        (q4/insert-seperator)))
     (goto-char (point-min))
-    (q4/postprocess))
+    (q4/postprocess)
+    (setq buffer-read-only t))
   (switch-to-buffer buffer)
   (q4/point-to-first-post)
   (message " ")
